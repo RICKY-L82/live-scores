@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>即時比分中心 | MLB・NBA・日職・韓職</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-icon">🏆</span>
+      <div class="brand-text">
+        <h1>即時比分中心</h1>
+        <p class="subtitle">MLB・NBA・日本職棒・韓國職棒</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="updated-at" id="updatedAt">尚未更新</span>
+      <button class="icon-btn" id="refreshBtn" title="立即重新整理" aria-label="立即重新整理">⟳</button>
+      <button class="icon-btn" id="notifBtn" title="比分變動桌面通知" aria-label="比分變動桌面通知">🔕</button>
+      <button class="icon-btn" id="themeBtn" title="切換深淺色" aria-label="切換深淺色">🌙</button>
+    </div>
+  </div>
+</header>
+
+<nav class="toolbar">
+  <div class="toolbar-inner">
+    <div class="league-tabs" id="leagueTabs">
+      <button class="tab active" data-league="all">全部</button>
+      <button class="tab" data-league="mlb">MLB</button>
+      <button class="tab" data-league="nba">NBA</button>
+      <button class="tab" data-league="npb">日職 NPB</button>
+      <button class="tab" data-league="kbo">韓職 KBO</button>
+    </div>
+    <div class="date-nav">
+      <button class="icon-btn small" id="prevDay" aria-label="前一天">‹</button>
+      <button class="date-label" id="dateLabel">今天</button>
+      <button class="icon-btn small" id="nextDay" aria-label="後一天">›</button>
+      <label class="auto-toggle">
+        <input type="checkbox" id="autoRefreshToggle" checked>
+        <span>自動更新</span>
+      </label>
+    </div>
+  </div>
+</nav>
+
+<main id="content" class="content">
+  <!-- league sections injected by JS -->
+</main>
+
+<footer class="site-footer">
+  <p>資料來源:MLB Stats API、ESPN、TheSportsDB(公開接口,僅供參考,實際請以官方轉播為準)</p>
+  <p>賠率資訊由 ESPN 合作博彩商提供,僅供參考,不構成任何投注建議;盤口異動紀錄僅為本瀏覽器開啟期間之觀測。</p>
+</footer>
+
+<div id="modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-panel" role="dialog" aria-modal="true">
+    <button class="modal-close" id="modalClose" aria-label="關閉">✕</button>
+    <div id="modalBody" class="modal-body"></div>
+  </div>
+</div>
+
+<script src="assets/js/app.js"></script>
+</body>
+</html>
