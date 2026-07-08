@@ -839,12 +839,63 @@
       if (!p || !p.battingOrder) return;
       var orderNum = Number(p.battingOrder);
       if (orderNum % 100 !== 0) return; // substitutes have non-x00 orders
+      var sb = (p.seasonStats && p.seasonStats.batting) || {};
       rows += '<tr><td>' + (orderNum / 100) + '. ' + esc(p.person.fullName) +
-        ' <span class="starter-mark">' + esc(p.position ? p.position.abbreviation : "") + '</span></td></tr>';
+        ' <span class="starter-mark">' + esc(p.position ? p.position.abbreviation : "") + '</span></td>' +
+        '<td>' + esc(sb.avg || "-") + '</td>' +
+        '<td>' + esc(sb.homeRuns !== undefined ? sb.homeRuns : "-") + '</td>' +
+        '<td>' + esc(sb.ops || "-") + '</td></tr>';
     });
     if (!rows) return "";
     return '<div><div class="detail-note" style="margin:0 0 4px"><b>' + esc(title) + '</b></div>' +
-      '<div class="table-wrap"><table class="stat-table" style="min-width:0">' + rows + '</table></div></div>';
+      '<div class="table-wrap"><table class="stat-table" style="min-width:0">' +
+      '<tr><th>先發打線</th><th>打擊率</th><th>全壘打</th><th>OPS</th></tr>' +
+      rows + '</table></div></div>';
+  }
+
+  // ---------- MLB first-inning (NRFI/YRFI) data ----------
+  var fiCache = {};
+  function getTeamFirstInningRates(teamId) {
+    if (!teamId) return Promise.resolve(null);
+    var hit = fiCache[teamId];
+    if (hit && Date.now() - hit.t < 600000) return Promise.resolve(hit.v);
+    var end = new Date(); end.setDate(end.getDate() - 1);
+    var start = new Date(); start.setDate(start.getDate() - 30);
+    var url = "https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=" + teamId +
+      "&startDate=" + toISODate(start) + "&endDate=" + toISODate(end) + "&hydrate=linescore";
+    return fetchJson(url).then(function (data) {
+      var games = [];
+      (data.dates || []).forEach(function (d) { games = games.concat(d.games || []); });
+      games = games.filter(function (g) {
+        return g.status && g.status.abstractGameState === "Final" &&
+          g.linescore && g.linescore.innings && g.linescore.innings[0];
+      }).slice(-15);
+      if (!games.length) return null;
+      var off = 0, def = 0;
+      games.forEach(function (g) {
+        var isAway = g.teams.away.team.id === teamId;
+        var inn1 = g.linescore.innings[0];
+        var own = isAway ? inn1.away : inn1.home;
+        var opp = isAway ? inn1.home : inn1.away;
+        if (own && Number(own.runs) > 0) off++;
+        if (opp && Number(opp.runs) > 0) def++;
+      });
+      var v = { n: games.length, off: off, def: def, offRate: off / games.length, defRate: def / games.length };
+      fiCache[teamId] = { t: Date.now(), v: v };
+      return v;
+    }).catch(function () { return null; });
+  }
+
+  function getPitcherFirstInningSplit(pid) {
+    if (!pid) return Promise.resolve(null);
+    var season = new Date().getFullYear();
+    return fetchJson("https://statsapi.mlb.com/api/v1/people/" + pid +
+        "/stats?stats=statSplits&group=pitching&sitCodes=i01&season=" + season)
+      .then(function (d) {
+        var sp = d.stats && d.stats[0] && d.stats[0].splits && d.stats[0].splits[0];
+        return sp ? sp.stat : null;
+      })
+      .catch(function () { return null; });
   }
 
   function renderMlbPreview(game, gd, ld, headerHtml, body) {
@@ -858,8 +909,20 @@
         .catch(function () { return null; });
     });
 
-    return Promise.all([getMlbForm(), Promise.all(statFetches)]).then(function (results) {
+    var awayTeamId = gd.teams && gd.teams.away && gd.teams.away.id;
+    var homeTeamId = gd.teams && gd.teams.home && gd.teams.home.id;
+
+    return Promise.all([
+      getMlbForm(),
+      Promise.all(statFetches),
+      getTeamFirstInningRates(awayTeamId),
+      getTeamFirstInningRates(homeTeamId),
+      getPitcherFirstInningSplit(pp.away && pp.away.id),
+      getPitcherFirstInningSplit(pp.home && pp.home.id),
+    ]).then(function (results) {
       var formMap = results[0];
+      var awayFi = results[2], homeFi = results[3];
+      var awayP1 = results[4], homeP1 = results[5];
       var statsById = {};
       results[1].forEach(function (r) {
         if (r && r.people && r.people[0]) {
@@ -963,6 +1026,57 @@
         html += sectionBlock("賽前分析",
           '<div class="analysis-box">' + analysis.map(function (p) { return "<p>" + p + "</p>"; }).join("") + '</div>' +
           '<div class="detail-note">分析為根據球隊戰績與投手數據之簡易推估,僅供參考。</div>');
+      }
+
+      // first-inning (NRFI/YRFI) analysis
+      if (awayFi || homeFi) {
+        var inner = "";
+        var pA, pH;
+        // blend each offense's 1st-inning scoring rate with the opponent's 1st-inning concede rate
+        if (awayFi && homeFi) {
+          pA = (awayFi.offRate + homeFi.defRate) / 2;
+          pH = (homeFi.offRate + awayFi.defRate) / 2;
+        } else if (awayFi) { pA = awayFi.offRate; pH = awayFi.defRate; }
+        else { pA = homeFi.defRate; pH = homeFi.offRate; }
+        var nrfi = (1 - pA) * (1 - pH) * 100;
+        inner += probBarHtml("YRFI 首局有得分", "NRFI 首局無得分", 100 - nrfi, nrfi);
+
+        var fiRows = "";
+        function fiRow(name, fi) {
+          if (!fi) return "";
+          return '<tr><td>' + esc(name) + '</td>' +
+            '<td>' + fi.off + ' / ' + fi.n + '(' + Math.round(fi.offRate * 100) + '%)</td>' +
+            '<td>' + fi.def + ' / ' + fi.n + '(' + Math.round(fi.defRate * 100) + '%)</td></tr>';
+        }
+        fiRows += fiRow(game.away.name, awayFi) + fiRow(game.home.name, homeFi);
+        var nGames = (awayFi || homeFi).n;
+        if (fiRows) {
+          inner += '<div class="table-wrap" style="margin-top:10px"><table class="stat-table" style="min-width:320px">' +
+            '<tr><th>近 ' + nGames + ' 場</th><th>首局有得分</th><th>首局有失分</th></tr>' + fiRows + '</table></div>';
+        }
+
+        var fiNotes = [];
+        function p1Note(p, st) {
+          if (!p || !st || !st.era) return;
+          var seasonSt = statsById[p.id] || {};
+          var line = esc(p.fullName) + " 首局 ERA <b>" + esc(st.era) + "</b>(共 " + esc(st.inningsPitched || "-") + " 局,WHIP " + esc(st.whip || "-") + ")";
+          var sEra = seasonSt.era ? Number(seasonSt.era) : null;
+          var fEra = Number(st.era);
+          if (sEra !== null && !isNaN(fEra)) {
+            var diff = fEra - sEra;
+            if (diff > 0.75) line += ",明顯高於其球季 ERA " + esc(seasonSt.era) + ",開局偏不穩";
+            else if (diff < -0.75) line += ",低於其球季 ERA " + esc(seasonSt.era) + ",開局表現穩健";
+            else line += ",與其球季 ERA " + esc(seasonSt.era) + " 相近";
+          }
+          fiNotes.push("<p>" + line + "。</p>");
+        }
+        p1Note(pp.away, awayP1);
+        p1Note(pp.home, homeP1);
+        fiNotes.push('<p>綜合兩隊近況估算,本場 <b>NRFI(首局雙方皆未得分)機率約 ' + Math.round(nrfi) + '%</b>。</p>');
+        inner += '<div class="analysis-box" style="margin-top:10px">' + fiNotes.join("") + '</div>' +
+          '<div class="detail-note">依兩隊近 ' + nGames + ' 場首局得失分與先發投手首局分項數據之簡易估算,僅供參考,不構成投注建議。</div>';
+
+        html += sectionBlock("首局得失分分析(NRFI / YRFI)", inner);
       }
 
       html += oddsDetailHtml(game);
