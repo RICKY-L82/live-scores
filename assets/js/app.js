@@ -120,6 +120,49 @@
 
   function stripOU(line) { return String(line || "").replace(/^[ou]/i, ""); }
 
+  // American odds -> implied probability (0..1)
+  function impliedProb(american) {
+    var o = Number(String(american || "").replace(/^\+/, ""));
+    if (isNaN(o) || o === 0) return null;
+    return o < 0 ? (-o) / ((-o) + 100) : 100 / (o + 100);
+  }
+  function pctStr(p) { return (p * 100).toFixed(1) + "%"; }
+  function clampNum(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  // implied-probability table for all posted markets; null if no usable moneyline
+  function oddsImpliedAnalysis(od) {
+    if (!od || !od.mlAway || !od.mlAway.cur || !od.mlHome || !od.mlHome.cur) return null;
+    var ipA = impliedProb(od.mlAway.cur), ipH = impliedProb(od.mlHome.cur);
+    if (ipA === null || ipH === null) return null;
+    var vig = ipA + ipH;
+    var fairA = ipA / vig, fairH = ipH / vig;
+
+    var rows = "";
+    rows += '<tr><td>獨贏(客)</td><td>' + esc(od.mlAway.cur) + '</td><td>' + pctStr(ipA) + '</td><td>' + pctStr(fairA) + '</td></tr>';
+    rows += '<tr><td>獨贏(主)</td><td>' + esc(od.mlHome.cur) + '</td><td>' + pctStr(ipH) + '</td><td>' + pctStr(fairH) + '</td></tr>';
+    if (od.spAway && od.spAway.cur) {
+      var ipSA = impliedProb(od.spAway.cur);
+      rows += '<tr><td>讓分(客 ' + esc(od.spAway.line || "") + ')</td><td>' + esc(od.spAway.cur) + '</td><td>' + (ipSA !== null ? pctStr(ipSA) : "-") + '</td><td>-</td></tr>';
+    }
+    if (od.spHome && od.spHome.cur) {
+      var ipSH = impliedProb(od.spHome.cur);
+      rows += '<tr><td>讓分(主 ' + esc(od.spHome.line || "") + ')</td><td>' + esc(od.spHome.cur) + '</td><td>' + (ipSH !== null ? pctStr(ipSH) : "-") + '</td><td>-</td></tr>';
+    }
+    if (od.over && od.over.cur) {
+      var ipO = impliedProb(od.over.cur);
+      rows += '<tr><td>大分 ' + esc(stripOU(od.over.line)) + '</td><td>' + esc(od.over.cur) + '</td><td>' + (ipO !== null ? pctStr(ipO) : "-") + '</td><td>-</td></tr>';
+    }
+    if (od.under && od.under.cur) {
+      var ipU = impliedProb(od.under.cur);
+      rows += '<tr><td>小分 ' + esc(stripOU(od.under.line)) + '</td><td>' + esc(od.under.cur) + '</td><td>' + (ipU !== null ? pctStr(ipU) : "-") + '</td><td>-</td></tr>';
+    }
+    var tableHtml = '<div class="table-wrap"><table class="stat-table" style="min-width:380px">' +
+      '<tr><th>市場</th><th>美式賠率</th><th>隱含機率</th><th>去水機率</th></tr>' + rows + '</table></div>';
+    var vigNote = "<p>莊家水錢約 <b>" + ((vig - 1) * 100).toFixed(1) + "%</b>(獨贏隱含機率合計 " + pctStr(vig) + ",去水後即市場公平機率)。</p>";
+
+    return { tableHtml: tableHtml, vigNote: vigNote, fairA: fairA, fairH: fairH };
+  }
+
   function oddsSummary(od) {
     if (!od) return "";
     var p = [];
@@ -957,13 +1000,14 @@
 
       // confirmed lineups (posted ~1-3 hours before first pitch)
       var box = ld && ld.boxscore && ld.boxscore.teams;
-      if (box) {
-        var awayLineup = mlbLineupSection(game.away.name, box.away);
-        var homeLineup = mlbLineupSection(game.home.name, box.home);
-        if (awayLineup || homeLineup) {
-          html += sectionBlock("先發打線(已公布)",
-            '<div class="lineup-grid">' + awayLineup + homeLineup + '</div>');
-        }
+      var awayLineup = box ? mlbLineupSection(game.away.name, box.away) : "";
+      var homeLineup = box ? mlbLineupSection(game.home.name, box.home) : "";
+      if (awayLineup || homeLineup) {
+        html += sectionBlock("先發打線(已公布)",
+          '<div class="lineup-grid">' + awayLineup + homeLineup + '</div>');
+      } else {
+        html += sectionBlock("先發打線",
+          '<div class="analysis-box"><p>先發打線尚未公布,MLB 通常於開賽前 1–3 小時公布,屆時重新開啟本視窗即可看到。</p></div>');
       }
 
       // meta
@@ -1029,6 +1073,7 @@
       }
 
       // first-inning (NRFI/YRFI) analysis
+      var nrfiProb = null;
       if (awayFi || homeFi) {
         var inner = "";
         var pA, pH;
@@ -1039,6 +1084,7 @@
         } else if (awayFi) { pA = awayFi.offRate; pH = awayFi.defRate; }
         else { pA = homeFi.defRate; pH = homeFi.offRate; }
         var nrfi = (1 - pA) * (1 - pH) * 100;
+        nrfiProb = nrfi / 100;
         inner += probBarHtml("YRFI 首局有得分", "NRFI 首局無得分", 100 - nrfi, nrfi);
 
         var fiRows = "";
@@ -1077,6 +1123,72 @@
           '<div class="detail-note">依兩隊近 ' + nGames + ' 場首局得失分與先發投手首局分項數據之簡易估算,僅供參考,不構成投注建議。</div>';
 
         html += sectionBlock("首局得失分分析(NRFI / YRFI)", inner);
+      }
+
+      // American odds analysis & best-value combo
+      var oa = oddsImpliedAnalysis(game.odds);
+      if (oa) {
+        var oaInner = oa.tableHtml;
+        var oaNotes = [oa.vigNote];
+
+        // model home win prob: record share + last-10 share + starter ERA edge + home advantage
+        var modelH = null;
+        if (ar && hr) {
+          var comps = [];
+          var aP = Number(ar.pct), hP = Number(hr.pct);
+          if (aP + hP > 0) comps.push(hP / (aP + hP));
+          function l10rate(f) {
+            if (!f || !f.lastTen) return null;
+            var parts = f.lastTen.split("-");
+            var w = Number(parts[0]), l = Number(parts[1]);
+            return (w + l) > 0 ? w / (w + l) : null;
+          }
+          var aL10 = l10rate(aForm), hL10 = l10rate(hForm);
+          if (aL10 !== null && hL10 !== null && aL10 + hL10 > 0) comps.push(hL10 / (aL10 + hL10));
+          if (comps.length) {
+            modelH = comps.reduce(function (x, y) { return x + y; }, 0) / comps.length;
+            var aEraN = aSt && aSt.era ? Number(aSt.era) : NaN;
+            var hEraN = hSt && hSt.era ? Number(hSt.era) : NaN;
+            if (!isNaN(aEraN) && !isNaN(hEraN)) {
+              modelH += clampNum((aEraN - hEraN) * 0.04, -0.06, 0.06);
+            }
+            modelH += 0.035; // home advantage
+            modelH = clampNum(modelH, 0.05, 0.95);
+          }
+        }
+
+        var picks = [];
+        if (modelH !== null) {
+          var edgeH = modelH - oa.fairH, edgeA = (1 - modelH) - oa.fairA;
+          oaNotes.push("<p>模型估計:主隊勝率 <b>" + pctStr(modelH) + "</b> vs 市場去水 " + pctStr(oa.fairH) +
+            "(價值 " + (edgeH >= 0 ? "+" : "") + (edgeH * 100).toFixed(1) + "%);客隊 <b>" + pctStr(1 - modelH) +
+            "</b> vs " + pctStr(oa.fairA) + "(價值 " + (edgeA >= 0 ? "+" : "") + (edgeA * 100).toFixed(1) + "%)。</p>");
+          if (edgeH >= edgeA && edgeH > 0.02) {
+            picks.push({ label: "主隊獨贏 " + game.home.name + "(ML " + game.odds.mlHome.cur + ")", prob: modelH, edge: edgeH });
+          } else if (edgeA > edgeH && edgeA > 0.02) {
+            picks.push({ label: "客隊獨贏 " + game.away.name + "(ML " + game.odds.mlAway.cur + ")", prob: 1 - modelH, edge: edgeA });
+          }
+        }
+        if (nrfiProb !== null) {
+          if (nrfiProb >= 0.55) picks.push({ label: "NRFI 首局無得分", prob: nrfiProb, edge: nrfiProb - 0.5 });
+          else if (nrfiProb <= 0.45) picks.push({ label: "YRFI 首局有得分", prob: 1 - nrfiProb, edge: 0.5 - nrfiProb });
+        }
+        picks.sort(function (x, y) { return y.edge - x.edge; });
+
+        if (picks.length) {
+          oaNotes.push("<p>最看好:<b>" + esc(picks[0].label) + "</b>(估算命中率 " + pctStr(picks[0].prob) + ")。</p>");
+          if (picks.length >= 2) {
+            var comboProb = picks[0].prob * picks[1].prob;
+            oaNotes.push("<p>最看好組合:<b>" + esc(picks[0].label) + " + " + esc(picks[1].label) +
+              "</b>,估算同時命中機率約 <b>" + pctStr(comboProb) + "</b>(以獨立事件相乘估算)。</p>");
+          }
+        } else {
+          oaNotes.push("<p>模型與市場價格接近,本場未發現明顯價值面,建議觀望。</p>");
+        }
+
+        oaInner += '<div class="analysis-box" style="margin-top:10px">' + oaNotes.join("") + '</div>' +
+          '<div class="detail-note">模型為戰績/近十場/先發投手之簡易統計推估,與市場價格比較僅供參考,不構成投注建議。</div>';
+        html += sectionBlock("美式盤口分析與最看好組合", oaInner);
       }
 
       html += oddsDetailHtml(game);
@@ -1216,6 +1328,30 @@
       });
     });
     if (iRows) html += sectionBlock("傷兵名單", '<ul class="injury-list">' + iRows + '</ul>');
+
+    // American odds analysis (model = ESPN predictor when available)
+    var oa = oddsImpliedAnalysis(game.odds);
+    if (oa) {
+      var oaInner = oa.tableHtml;
+      var oaNotes = [oa.vigNote];
+      if (aProj && hProj && aProj + hProj > 0) {
+        var modelH = hProj / (aProj + hProj);
+        var edgeH = modelH - oa.fairH, edgeA = (1 - modelH) - oa.fairA;
+        oaNotes.push("<p>ESPN 預測:主隊勝率 <b>" + pctStr(modelH) + "</b> vs 市場去水 " + pctStr(oa.fairH) +
+          "(價值 " + (edgeH >= 0 ? "+" : "") + (edgeH * 100).toFixed(1) + "%);客隊 <b>" + pctStr(1 - modelH) +
+          "</b> vs " + pctStr(oa.fairA) + "(價值 " + (edgeA >= 0 ? "+" : "") + (edgeA * 100).toFixed(1) + "%)。</p>");
+        if (edgeH >= edgeA && edgeH > 0.02) {
+          oaNotes.push("<p>最看好:<b>主隊獨贏 " + esc(game.home.name) + "(ML " + esc(game.odds.mlHome.cur) + ")</b>(預測勝率 " + pctStr(modelH) + ")。</p>");
+        } else if (edgeA > edgeH && edgeA > 0.02) {
+          oaNotes.push("<p>最看好:<b>客隊獨贏 " + esc(game.away.name) + "(ML " + esc(game.odds.mlAway.cur) + ")</b>(預測勝率 " + pctStr(1 - modelH) + ")。</p>");
+        } else {
+          oaNotes.push("<p>預測與市場價格接近,本場未發現明顯價值面,建議觀望。</p>");
+        }
+      }
+      oaInner += '<div class="analysis-box" style="margin-top:10px">' + oaNotes.join("") + '</div>' +
+        '<div class="detail-note">以 ESPN 勝率預測與市場去水機率比較,僅供參考,不構成投注建議。</div>';
+      html += sectionBlock("美式盤口分析", oaInner);
+    }
 
     if (!html) {
       html = sectionBlock("賽前資訊", '<div class="analysis-box"><p>暫無更多賽前資料,開賽後將顯示逐節比分與球員數據。</p></div>');
