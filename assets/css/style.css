@@ -643,6 +643,19 @@ a.icon-btn.nav-link { text-decoration: none; }
 .picks-content { max-width: 860px; }
 .picks-intro { margin-bottom: 14px; }
 
+.picks-section-title {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 16px; font-weight: 800;
+  margin: 22px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.picks-section-title:first-of-type { margin-top: 18px; }
+.picks-section-count {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-faint);
+}
+
 .pick-card {
   display: flex;
   gap: 14px;

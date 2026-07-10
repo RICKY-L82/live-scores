@@ -427,27 +427,40 @@
     );
   }
 
+  function sectionHtml(title, list, total) {
+    var html = '<h2 class="picks-section-title">' + title +
+      '<span class="picks-section-count">候選 ' + total + ' 注</span></h2>';
+    if (!list.length) {
+      return html + '<div class="empty-state">此類別今天沒有可分析的未開賽場次。</div>';
+    }
+    html += list.map(function (c, i) { return pickCardHtml(c, i + 1); }).join("");
+    if (total < TOP_N) {
+      html += '<p class="detail-note">此類別今日可分析的候選僅 ' + total + ' 注,已全部列出。</p>';
+    }
+    return html;
+  }
+
   function render(candidates) {
     var el = document.getElementById("picksContent");
     var now = Date.now();
     candidates = candidates.filter(function (c) {
       return c.start && new Date(c.start).getTime() > now;
     });
-    candidates.sort(function (a, b) { return b.edge - a.edge; });
-    var top = candidates.slice(0, TOP_N);
+    var byEdge = function (a, b) { return b.edge - a.edge; };
+    var fi = candidates.filter(function (c) { return c.type === "nrfi" || c.type === "yrfi"; }).sort(byEdge);
+    var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byEdge);
 
-    if (!top.length) {
+    if (!fi.length && !ml.length) {
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
       return;
     }
-    var note = candidates.length < TOP_N
-      ? '<p class="detail-note">今日可分析的候選僅 ' + candidates.length + ' 注,已全部列出。</p>' : "";
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
-      '共掃描 <b>' + candidates.length + '</b> 個候選(勝負盤價值注 + 首局 NRFI/YRFI),' +
-      '依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + top.length + ' 名。' +
+      '共掃描 <b>' + candidates.length + '</b> 個候選,分為「首局 NRFI/YRFI」與「勝負盤」兩區,' +
+      '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p></div>' +
-      top.map(function (c, i) { return pickCardHtml(c, i + 1); }).join("") + note;
+      sectionHtml("⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
+      sectionHtml("🏆 勝負盤(MLB / NBA)", ml.slice(0, TOP_N), ml.length);
   }
 
   function run() {
