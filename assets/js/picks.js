@@ -68,17 +68,43 @@
 
   // ---------- game-total (大小分) model ----------
   // expected total runs: each side = (own runs scored + opponent runs allowed)/2,
-  // nudged by each starter's season ERA vs the ~4.20 league average
+  // nudged by each starter's season ERA vs the league average (falls back to the
+  // static constant when today's pitcher pool is too small to derive one live —
+  // see leagueEraFromPool()), plus park/weather run environment.
   var TOTAL_SD = 4.3; // empirical stdev of MLB combined runs
-  var LEAGUE_ERA = 4.2;
-  function expectedTotalRuns(aRuns, hRuns, aEra, hEra) {
+  var LEAGUE_ERA = 4.2; // fallback only; leagueEraFromPool() overrides per run
+  function expectedTotalRuns(aRuns, hRuns, aEra, hEra, leagueEra, parkRunAdj, weatherRunAdj) {
     if (!aRuns || !hRuns || aRuns.rsAvg === null || hRuns.rsAvg === null) return null;
+    leagueEra = isFinite(leagueEra) && leagueEra > 0 ? leagueEra : LEAGUE_ERA;
     var tot = (aRuns.rsAvg + hRuns.raAvg) / 2 + (hRuns.rsAvg + aRuns.raAvg) / 2;
     [aEra, hEra].forEach(function (e) {
       e = Number(e);
-      if (isFinite(e) && e > 0) tot += clampNum((e - LEAGUE_ERA) * 0.22, -0.7, 0.7);
+      if (isFinite(e) && e > 0) tot += clampNum((e - leagueEra) * 0.22, -0.7, 0.7);
     });
+    tot += (parkRunAdj || 0) + (weatherRunAdj || 0);
     return clampNum(tot, 5, 13.5);
+  }
+  // derives today's live starter-ERA baseline from the actual probable-pitcher
+  // pool instead of a fixed constant, so the total model doesn't silently drift
+  // out of sync with the current run-scoring environment (e.g. a juiced/deadened
+  // ball year). Needs a reasonably sized sample or it keeps the static fallback.
+  function leagueEraFromPool(seasonStats, pitcherIds) {
+    var vals = [];
+    (pitcherIds || []).forEach(function (id) {
+      var e = Number(seasonStats[id] && seasonStats[id].era);
+      if (isFinite(e) && e > 0 && e < 15) vals.push(e);
+    });
+    if (vals.length < 10) return LEAGUE_ERA;
+    return vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+  }
+  // shrink a small-sample rate toward a league-wide prior (regression to the
+  // mean) — with as few as 8 games behind offRate/defRate, a team's binary
+  // first-inning outcomes are noisy (95% CI of roughly ±20 points on 15 games),
+  // so unshrunk rates were feeding overconfident edges straight into picks.
+  function shrinkRate(rate, n, prior, k) {
+    if (rate === null || rate === undefined || prior === null || prior === undefined) return rate;
+    k = k || 8;
+    return (rate * n + prior * k) / (n + k);
   }
   // Abramowitz-Stegun normal CDF approximation
   function normCdf(z) {
@@ -387,6 +413,20 @@
           raAvg: runN ? raSum / runN : null,
         };
       });
+      // league-wide averages used as the shrinkage prior below — derived from
+      // the same fetch so it tracks the current run-scoring environment rather
+      // than a hardcoded guess
+      var ids = Object.keys(rates);
+      var lo = 0, ld = 0, lrs = 0, lra = 0, rn = 0;
+      ids.forEach(function (id) {
+        var r = rates[id];
+        lo += r.offRate; ld += r.defRate;
+        if (r.rsAvg !== null) { lrs += r.rsAvg; lra += r.raAvg; rn++; }
+      });
+      rates._league = ids.length ? {
+        offRate: lo / ids.length, defRate: ld / ids.length,
+        rsAvg: rn ? lrs / rn : null, raAvg: rn ? lra / rn : null,
+      } : null;
       return rates;
     }).catch(function () { return {}; });
   }
@@ -509,7 +549,50 @@
   function parseWind(w) {
     if (!w) return null;
     var m = String(w).match(/(\d+(?:\.\d+)?)\s*mph/i);
-    return { mph: m ? Number(m[1]) : null, out: /out to/i.test(String(w)) };
+    return { mph: m ? Number(m[1]) : null, out: /out to/i.test(String(w)), in: /in from/i.test(String(w)) };
+  }
+
+  // ---------- park & weather run environment ----------
+  // YRFI_PARKS / NRFI_PARKS were already curated for the checklist display but
+  // never actually moved the NRFI/大小分 numbers — they only rendered a label
+  // and (Coors only) fed the veto gate. That's a real gap: a park the site
+  // itself flags as "hitter friendly" had zero effect on the estimated
+  // probability. These wire that same signal into both models as modest,
+  // deliberately conservative nudges (Coors' altitude effect is the one
+  // well-established outlier, so it gets the largest adjustment).
+  function parkTotalRunAdj(venue) {
+    if (!venue) return 0;
+    if (venue === "Coors Field") return 1.4;
+    if (YRFI_PARKS.indexOf(venue) !== -1) return 0.5;
+    if (NRFI_PARKS.indexOf(venue) !== -1) return -0.4;
+    return 0;
+  }
+  function parkFirstInningAdj(venue) {
+    if (!venue) return 0;
+    if (venue === "Coors Field") return -0.06;
+    if (YRFI_PARKS.indexOf(venue) !== -1) return -0.03;
+    if (NRFI_PARKS.indexOf(venue) !== -1) return 0.025;
+    return 0;
+  }
+  function weatherTotalRunAdj(w) {
+    if (!w) return 0;
+    var temp = numOr(w.temp), wind = parseWind(w.wind), adj = 0;
+    if (temp !== null && temp >= 95) adj += 0.3;
+    if (wind && wind.mph !== null && wind.mph > 12) {
+      if (wind.out) adj += 0.5;
+      else if (wind.in) adj -= 0.4;
+    }
+    return adj;
+  }
+  function weatherFirstInningAdj(w) {
+    if (!w) return 0;
+    var temp = numOr(w.temp), wind = parseWind(w.wind), adj = 0;
+    if (temp !== null && temp >= 95) adj -= 0.02;
+    if (wind && wind.mph !== null && wind.mph > 12) {
+      if (wind.out) adj -= 0.03;
+      else if (wind.in) adj += 0.02;
+    }
+    return adj;
   }
 
   function buildChecklist(ctx) {
@@ -760,6 +843,8 @@
         pitcherIds.forEach(function (id, i) { fiByPitcher[id] = pres[1][i]; });
         var extras = pres[2];
         var nrfiOddsMap = pres[3];
+        var dynLeagueEra = leagueEraFromPool(seasonStats, pitcherIds);
+        var fiLeague = fiRates._league;
 
         var candidates = [];
         games.forEach(function (g, gi) {
@@ -840,8 +925,16 @@
           // -- NRFI / YRFI --
           var aFi = fiRates[away.id], hFi = fiRates[home.id];
           if (aFi && hFi) {
-            var pA = (aFi.offRate + hFi.defRate) / 2;
-            var pH = (hFi.offRate + aFi.defRate) / 2;
+            // shrink each side's small-sample rate toward the league-wide mean
+            // before feeding the probability model; the raw rates still drive
+            // every "客隊近 N 場…" sentence below so the reasoning stays honest
+            // about what was actually observed
+            var aOffM = shrinkRate(aFi.offRate, aFi.n, fiLeague && fiLeague.offRate);
+            var hDefM = shrinkRate(hFi.defRate, hFi.n, fiLeague && fiLeague.defRate);
+            var hOffM = shrinkRate(hFi.offRate, hFi.n, fiLeague && fiLeague.offRate);
+            var aDefM = shrinkRate(aFi.defRate, aFi.n, fiLeague && fiLeague.defRate);
+            var pA = (aOffM + hDefM) / 2;
+            var pH = (hOffM + aDefM) / 2;
             var nrfi = (1 - pA) * (1 - pH);
             var reasons2 = [
               "客隊近 " + aFi.n + " 場首局得分 " + aFi.off + " 次(" + Math.round(aFi.offRate * 100) +
@@ -865,6 +958,20 @@
               else if (era >= 6.0) { nrfi -= 0.03; reasons2.push(pair[1] + "隊先發 " + esc(pp.fullName) + " 首局 ERA 高達 " + esc(st.era) + "(" + esc(st.inningsPitched) + " 局),開局明顯不穩(NRFI −3%)。"); }
               else reasons2.push(pair[1] + "隊先發 " + esc(pp.fullName) + " 首局 ERA " + esc(st.era) + "。");
             });
+            var venueName = g.venue && g.venue.name;
+            var wx = extras[gi] && extras[gi].weather;
+            var parkFiAdj = parkFirstInningAdj(venueName);
+            var weatherFiAdj = weatherFirstInningAdj(wx);
+            if (parkFiAdj) {
+              nrfi += parkFiAdj;
+              reasons2.push("球場「" + esc(venueName) + "」" + (parkFiAdj < 0 ? "偏打者向" : "偏投手向") +
+                "(NRFI " + (parkFiAdj >= 0 ? "+" : "") + (parkFiAdj * 100).toFixed(1) + "%)。");
+            }
+            if (weatherFiAdj) {
+              nrfi += weatherFiAdj;
+              reasons2.push((weatherFiAdj < 0 ? "天氣條件(高溫或強風吹向外野)對進攻有利" : "強風吹向內野抑制打擊") +
+                "(NRFI " + (weatherFiAdj >= 0 ? "+" : "") + (weatherFiAdj * 100).toFixed(1) + "%)。");
+            }
             nrfi = clampNum(nrfi, 0.05, 0.95);
             var nrOdds = nrfiOddsMap[away.name + "|" + home.name] || null;
             var pickNrfi, prob2, beNr, priceLabel;
@@ -922,7 +1029,11 @@
 
           // -- 大小分 (game total O/U) --
           var tot = totMap[away.name + "|" + home.name];
-          var expTot = expectedTotalRuns(aFi, hFi, aSt.era, hSt.era);
+          var totVenue = g.venue && g.venue.name;
+          var totWx = extras[gi] && extras[gi].weather;
+          var parkRunAdj = parkTotalRunAdj(totVenue);
+          var weatherRunAdj = weatherTotalRunAdj(totWx);
+          var expTot = expectedTotalRuns(aFi, hFi, aSt.era, hSt.era, dynLeagueEra, parkRunAdj, weatherRunAdj);
           if (tot && expTot !== null) {
             var pOver = overProbOf(expTot, tot.line);
             var beO = impliedProb(tot.over), beU = impliedProb(tot.under);
@@ -938,7 +1049,15 @@
               if (ppA && ppH && (aSt.era || hSt.era)) {
                 reasons3.push("先發 ERA:" + esc(ppA.fullName) + " " + esc(aSt.era || "-") +
                   " vs " + esc(ppH.fullName) + " " + esc(hSt.era || "-") +
-                  ",對照聯盟平均 " + LEAGUE_ERA.toFixed(2) + " 已計入總分調整。");
+                  ",對照聯盟平均 " + dynLeagueEra.toFixed(2) + " 已計入總分調整。");
+              }
+              if (parkRunAdj) {
+                reasons3.push("球場「" + esc(totVenue) + "」" + (parkRunAdj > 0 ? "偏打者向,總分預期 +" : "偏投手向,總分預期 ") +
+                  parkRunAdj.toFixed(1) + " 分。");
+              }
+              if (weatherRunAdj) {
+                reasons3.push("天氣(" + esc((totWx && totWx.temp ? totWx.temp + "°F、" : "") + (totWx && totWx.wind || "")) + ")" +
+                  (weatherRunAdj > 0 ? "有利進攻,總分預期 +" : "抑制進攻,總分預期 ") + weatherRunAdj.toFixed(1) + " 分。");
               }
               reasons3.push("模型預期總分 <b>" + expTot.toFixed(1) + "</b> 分 vs 盤口總分線 <b>" + tot.line +
                 "</b>,估計大分機率 " + pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + "。");

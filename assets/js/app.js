@@ -140,16 +140,18 @@
 
   // ---------- game-total (大小分) model — mirrors assets/js/picks.js ----------
   // expected total runs: each side = (own runs scored + opponent runs allowed)/2,
-  // nudged by each starter's season ERA vs the ~4.20 league average
+  // nudged by each starter's season ERA vs the ~4.20 league average, plus
+  // park/weather run environment (see parkTotalRunAdj/weatherTotalRunAdj below)
   var TOTAL_SD = 4.3; // empirical stdev of MLB combined runs
   var LEAGUE_ERA = 4.2;
-  function expectedTotalRuns(aRuns, hRuns, aEra, hEra) {
+  function expectedTotalRuns(aRuns, hRuns, aEra, hEra, parkRunAdj, weatherRunAdj) {
     if (!aRuns || !hRuns || aRuns.rsAvg === null || hRuns.rsAvg === null) return null;
     var tot = (aRuns.rsAvg + hRuns.raAvg) / 2 + (hRuns.rsAvg + aRuns.raAvg) / 2;
     [aEra, hEra].forEach(function (e) {
       e = Number(e);
       if (isFinite(e) && e > 0) tot += clampNum((e - LEAGUE_ERA) * 0.22, -0.7, 0.7);
     });
+    tot += (parkRunAdj || 0) + (weatherRunAdj || 0);
     return clampNum(tot, 5, 13.5);
   }
   // Abramowitz-Stegun normal CDF approximation
@@ -161,6 +163,52 @@
   }
   function overProbOf(expTot, line) {
     return 1 - normCdf((line - expTot) / TOTAL_SD);
+  }
+
+  // ---------- park & weather run environment — mirrors assets/js/picks.js ----------
+  // these were previously only checked in picks.js's checklist display; this
+  // page's game-detail modal never applied them to the NRFI/大小分 numbers at
+  // all, even though venue and weather are already fetched for display here.
+  var YRFI_PARKS = ["Coors Field", "Great American Ball Park", "Yankee Stadium"];
+  var NRFI_PARKS = ["Petco Park", "Oracle Park", "T-Mobile Park"];
+  function parseWind(w) {
+    if (!w) return null;
+    var m = String(w).match(/(\d+(?:\.\d+)?)\s*mph/i);
+    return { mph: m ? Number(m[1]) : null, out: /out to/i.test(String(w)), in: /in from/i.test(String(w)) };
+  }
+  function parkTotalRunAdj(venue) {
+    if (!venue) return 0;
+    if (venue === "Coors Field") return 1.4;
+    if (YRFI_PARKS.indexOf(venue) !== -1) return 0.5;
+    if (NRFI_PARKS.indexOf(venue) !== -1) return -0.4;
+    return 0;
+  }
+  function parkFirstInningAdj(venue) {
+    if (!venue) return 0;
+    if (venue === "Coors Field") return -0.06;
+    if (YRFI_PARKS.indexOf(venue) !== -1) return -0.03;
+    if (NRFI_PARKS.indexOf(venue) !== -1) return 0.025;
+    return 0;
+  }
+  function weatherTotalRunAdj(w) {
+    if (!w) return 0;
+    var temp = Number(w.temp), wind = parseWind(w.wind), adj = 0;
+    if (isFinite(temp) && temp >= 95) adj += 0.3;
+    if (wind && wind.mph !== null && wind.mph > 12) {
+      if (wind.out) adj += 0.5;
+      else if (wind.in) adj -= 0.4;
+    }
+    return adj;
+  }
+  function weatherFirstInningAdj(w) {
+    if (!w) return 0;
+    var temp = Number(w.temp), wind = parseWind(w.wind), adj = 0;
+    if (isFinite(temp) && temp >= 95) adj -= 0.02;
+    if (wind && wind.mph !== null && wind.mph > 12) {
+      if (wind.out) adj -= 0.03;
+      else if (wind.in) adj += 0.02;
+    }
+    return adj;
   }
 
   // implied-probability table for all posted markets; null if no usable moneyline
@@ -1252,6 +1300,10 @@
           if (era <= 2.0) { nrfi += 3; p1Adj[p.id] = "+3%"; }
           else if (era >= 6.0) { nrfi -= 3; p1Adj[p.id] = "−3%"; }
         });
+        var venueName = gd.venue && gd.venue.name;
+        var parkFiAdjPct = parkFirstInningAdj(venueName) * 100;
+        var weatherFiAdjPct = weatherFirstInningAdj(gd.weather) * 100;
+        nrfi += parkFiAdjPct + weatherFiAdjPct;
         nrfi = clampNum(nrfi, 5, 95);
         nrfiProb = nrfi / 100;
         inner += probBarHtml("YRFI 首局有得分", "NRFI 首局無得分", 100 - nrfi, nrfi);
@@ -1289,6 +1341,14 @@
         }
         p1Note(pp.away, awayP1);
         p1Note(pp.home, homeP1);
+        if (parkFiAdjPct) {
+          fiNotes.push("<p>球場「" + esc(venueName) + "」" + (parkFiAdjPct < 0 ? "偏打者向" : "偏投手向") +
+            "(NRFI " + (parkFiAdjPct >= 0 ? "+" : "") + parkFiAdjPct.toFixed(1) + "%)。</p>");
+        }
+        if (weatherFiAdjPct) {
+          fiNotes.push("<p>" + (weatherFiAdjPct < 0 ? "天氣條件(高溫或強風吹向外野)對進攻有利" : "強風吹向內野抑制打擊") +
+            "(NRFI " + (weatherFiAdjPct >= 0 ? "+" : "") + weatherFiAdjPct.toFixed(1) + "%)。</p>");
+        }
         fiNotes.push('<p>綜合兩隊近況估算,本場 <b>NRFI(首局雙方皆未得分)機率約 ' + Math.round(nrfi) + '%</b>。</p>');
         inner += '<div class="analysis-box" style="margin-top:10px">' + fiNotes.join("") + '</div>' +
           '<div class="detail-note">依兩隊近 ' + nGames + ' 場首局得失分與先發投手首局分項數據之簡易估算,僅供參考。</div>';
@@ -1359,7 +1419,10 @@
       }
       var aStT = pp.away ? (statsById[pp.away.id] || {}) : {};
       var hStT = pp.home ? (statsById[pp.home.id] || {}) : {};
-      var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era);
+      var totVenue = gd.venue && gd.venue.name;
+      var parkRunAdj = parkTotalRunAdj(totVenue);
+      var weatherRunAdj = weatherTotalRunAdj(gd.weather);
+      var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, parkRunAdj, weatherRunAdj);
       if (totLine !== null && expTot !== null) {
         var pOver = overProbOf(expTot, totLine);
         var priceReal = !!(oPrice && uPrice);
@@ -1384,6 +1447,14 @@
         if (pp.away && pp.home && (aStT.era || hStT.era)) {
           ouNotes.push("<p>先發 ERA:" + esc(pp.away.fullName) + " <b>" + esc(aStT.era || "-") + "</b> vs " +
             esc(pp.home.fullName) + " <b>" + esc(hStT.era || "-") + "</b>,對照聯盟平均 " + LEAGUE_ERA.toFixed(2) + " 已計入總分調整。</p>");
+        }
+        if (parkRunAdj) {
+          ouNotes.push("<p>球場「" + esc(totVenue) + "」" + (parkRunAdj > 0 ? "偏打者向,總分預期 +" : "偏投手向,總分預期 ") +
+            parkRunAdj.toFixed(1) + " 分。</p>");
+        }
+        if (weatherRunAdj) {
+          ouNotes.push("<p>天氣條件" + (weatherRunAdj > 0 ? "有利進攻,總分預期 +" : "抑制進攻,總分預期 ") +
+            weatherRunAdj.toFixed(1) + " 分。</p>");
         }
         var edgeO2 = pOver - (beO === null ? 0.524 : beO), edgeU2 = (1 - pOver) - (beU === null ? 0.524 : beU);
         var leanOver = edgeO2 >= edgeU2;
