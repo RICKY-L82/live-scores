@@ -73,13 +73,29 @@
   // see leagueEraFromPool()), plus park/weather run environment.
   var TOTAL_SD = 4.3; // empirical stdev of MLB combined runs
   var LEAGUE_ERA = 4.2; // fallback only; leagueEraFromPool() overrides per run
-  function expectedTotalRuns(aRuns, hRuns, aEra, hEra, leagueEra, parkRunAdj, weatherRunAdj) {
+  var LEAGUE_AVG_BA = 0.244; // neutral baseline for the pitcher/hitter matchup deviations below
+  function expectedTotalRuns(aRuns, hRuns, aEra, hEra, leagueEra, parkRunAdj, weatherRunAdj, awayOff, homeOff, aBullEra, hBullEra, leagueBullEra) {
     if (!aRuns || !hRuns || aRuns.rsAvg === null || hRuns.rsAvg === null) return null;
     leagueEra = isFinite(leagueEra) && leagueEra > 0 ? leagueEra : LEAGUE_ERA;
     var tot = (aRuns.rsAvg + hRuns.raAvg) / 2 + (hRuns.rsAvg + aRuns.raAvg) / 2;
     [aEra, hEra].forEach(function (e) {
       e = Number(e);
       if (isFinite(e) && e > 0) tot += clampNum((e - leagueEra) * 0.22, -0.7, 0.7);
+    });
+    // bullpen ERA gets its own, smaller nudge — a starter typically covers
+    // more of a game's innings than the pen does, so this weighs less than
+    // the starter-ERA term above
+    leagueBullEra = isFinite(leagueBullEra) && leagueBullEra > 0 ? leagueBullEra : LEAGUE_ERA;
+    [aBullEra, hBullEra].forEach(function (e) {
+      e = Number(e);
+      if (isFinite(e) && e > 0) tot += clampNum((e - leagueBullEra) * 0.15, -0.5, 0.5);
+    });
+    // each side's offense-vs-today's-opposing-starter matchup average (pitcher's
+    // own history against this team blended with this lineup's own history
+    // against this pitcher) nudges the total the same direction as a hot/cold
+    // matchup would in practice
+    [awayOff, homeOff].forEach(function (m) {
+      if (m) tot += clampNum((m.avg - LEAGUE_AVG_BA) * 4, -0.4, 0.4);
     });
     tot += (parkRunAdj || 0) + (weatherRunAdj || 0);
     return clampNum(tot, 5, 13.5);
@@ -374,6 +390,30 @@
       .catch(function () { return {}; });
   }
 
+  // one call covers every team's bullpen ERA for the season (sitCodes=rp
+  // splits pitching stats to relief appearances only); feeds the moneyline
+  // and total-runs models the same way starter ERA already does. Not wired
+  // into NRFI/YRFI — the bullpen never appears in the 1st inning, so it has
+  // no bearing on that market.
+  function fetchBullpenEraMap(season) {
+    return fetchJson("https://statsapi.mlb.com/api/v1/teams/stats?stats=statSplits&sitCodes=rp&group=pitching&season=" +
+        season + "&sportIds=1")
+      .then(function (d) {
+        var map = {};
+        var splits = (d.stats && d.stats[0] && d.stats[0].splits) || [];
+        splits.forEach(function (sp) {
+          var era = numOr(sp.stat && sp.stat.era);
+          if (era !== null && sp.team) map[sp.team.id] = era;
+        });
+        return map;
+      })
+      .catch(function () { return {}; });
+  }
+  function leagueBullpenEra(map) {
+    var vals = Object.keys(map || {}).map(function (id) { return map[id]; }).filter(function (v) { return isFinite(v) && v > 0; });
+    return vals.length ? vals.reduce(function (a, b) { return a + b; }, 0) / vals.length : LEAGUE_ERA;
+  }
+
   // one range-schedule call covers every team's recent first-inning record
   // and full-game runs scored/allowed (feeds the game-total model)
   function fetchFirstInningRates() {
@@ -457,6 +497,60 @@
       .catch(function () { return null; });
   }
 
+  // ---------- pitcher-vs-team / batter-vs-pitcher matchup signal ----------
+  // A literal "ERA against this specific opponent" isn't exposed by the free
+  // MLB Stats API — its vsTeam pitching split carries no earnedRuns/
+  // inningsPitched field, only the batting line the pitcher has allowed. That
+  // batting-average-against line is used instead (arguably the more direct
+  // matchup number anyway) and blended with the flip side: the team's
+  // currently-posted top-3 hitters' own career average against this exact
+  // starter (vsPlayerTotal). Either half needs a real at-bat sample or it's
+  // dropped rather than fed in noisy. No season param is passed to either
+  // call — MLB Stats API silently scopes "Total" splits to a single season
+  // when one is present, which would collapse a multi-year matchup down to
+  // however many times these two have met this year alone.
+  var MATCHUP_MIN_AB = 15;
+  function fetchPitcherVsTeam(pitcherId, teamId) {
+    if (!pitcherId || !teamId) return Promise.resolve(null);
+    return fetchJson("https://statsapi.mlb.com/api/v1/people/" + pitcherId +
+        "/stats?stats=vsTeamTotal&opposingTeamId=" + teamId + "&group=pitching")
+      .then(function (d) {
+        var sp = d.stats && d.stats[0] && d.stats[0].splits && d.stats[0].splits[0];
+        var st = sp && sp.stat;
+        var ab = st && numOr(st.atBats);
+        return st && ab >= MATCHUP_MIN_AB ? { avg: numOr(st.avg), atBats: ab } : null;
+      })
+      .catch(function () { return null; });
+  }
+  function fetchHittersVsPitcher(batterIds, pitcherId) {
+    if (!batterIds || !batterIds.length || !pitcherId) return Promise.resolve(null);
+    var url = "https://statsapi.mlb.com/api/v1/people?personIds=" + batterIds.join(",") +
+      "&hydrate=stats(group=[hitting],type=[vsPlayerTotal],opposingPlayerId=" + pitcherId + ")";
+    return fetchJson(url).then(function (d) {
+      var ab = 0, hits = 0;
+      (d.people || []).forEach(function (p) {
+        var sp = p.stats && p.stats[0] && p.stats[0].splits && p.stats[0].splits[0];
+        var st = sp && sp.stat;
+        if (!st) return;
+        var a = numOr(st.atBats);
+        if (a) { ab += a; hits += numOr(st.hits) || 0; }
+      });
+      return ab >= MATCHUP_MIN_AB ? { avg: hits / ab, atBats: ab } : null;
+    }).catch(function () { return null; });
+  }
+  // AB-weighted blend of the pitcher's own history vs this team with this
+  // lineup's own history vs this pitcher; one lopsided sample is capped so it
+  // can't dominate the other
+  function combineMatchup(pitcherLine, hitterLine) {
+    var ab = 0, weighted = 0;
+    [pitcherLine, hitterLine].forEach(function (m) {
+      if (!m) return;
+      var w = Math.min(m.atBats, 100);
+      ab += w; weighted += m.avg * w;
+    });
+    return ab > 0 ? { avg: weighted / ab, atBats: ab } : null;
+  }
+
   // ---------- NRFI 15-item advanced checklist ----------
   // Items that need Statcast (Hard Hit%, Barrel%, xwOBA), a live NRFI market,
   // or umpire zone data have no free API source: they render as "no data" and
@@ -531,14 +625,31 @@
   }
 
   function collectChecklistData(g, season) {
+    var ppA = g.teams.away.probablePitcher, ppH = g.teams.home.probablePitcher;
+    var awayTeamId = g.teams.away.team.id, homeTeamId = g.teams.home.team.id;
     return Promise.all([
       fetchGameWeather(g.gamePk),
       fetchBoxscoreExtras(g.gamePk),
-      fetchTeam7dOps(g.teams.away.team.id, season),
-      fetchTeam7dOps(g.teams.home.team.id, season),
+      fetchTeam7dOps(awayTeamId, season),
+      fetchTeam7dOps(homeTeamId, season),
+      fetchPitcherVsTeam(ppA && ppA.id, homeTeamId), // away starter's career line vs the home team
+      fetchPitcherVsTeam(ppH && ppH.id, awayTeamId), // home starter's career line vs the away team
     ]).then(function (r) {
-      return fetchTop3Hitters(r[1].awayTop3.concat(r[1].homeTop3)).then(function (hitters) {
-        return { weather: r[0], box: r[1], ops7: { away: r[2], home: r[3] }, hitters: hitters };
+      var box = r[1];
+      return Promise.all([
+        fetchTop3Hitters(box.awayTop3.concat(box.homeTop3)),
+        fetchHittersVsPitcher(box.homeTop3, ppA && ppA.id), // home hitters' career avg vs the away starter
+        fetchHittersVsPitcher(box.awayTop3, ppH && ppH.id), // away hitters' career avg vs the home starter
+      ]).then(function (r2) {
+        return {
+          weather: r[0], box: box, ops7: { away: r[2], home: r[3] }, hitters: r2[0],
+          matchup: {
+            // home team's offense vs today's away starter: his own history + this lineup's own history
+            homeOff: combineMatchup(r[4], r2[1]),
+            // away team's offense vs today's home starter
+            awayOff: combineMatchup(r[5], r2[2]),
+          },
+        };
       });
     });
   }
@@ -786,7 +897,7 @@
 
   // same blend the game-detail modal uses: record share + last-10 share,
   // starter-ERA nudge, flat home advantage
-  function mlbModelHome(aRec, hRec, aEra, hEra) {
+  function mlbModelHome(aRec, hRec, aEra, hEra, awayOff, homeOff, aBullEra, hBullEra) {
     if (!aRec || !hRec) return null;
     var comps = [];
     if (aRec.pct + hRec.pct > 0) comps.push(hRec.pct / (aRec.pct + hRec.pct));
@@ -795,6 +906,15 @@
     if (!comps.length) return null;
     var m = comps.reduce(function (x, y) { return x + y; }, 0) / comps.length;
     if (isFinite(aEra) && isFinite(hEra)) m += clampNum((aEra - hEra) * 0.04, -0.06, 0.06);
+    // each side's offense-vs-today's-opposing-starter matchup average — home
+    // hitters crushing the away starter's history (or vice versa) nudges win
+    // probability the same direction
+    var homeAvg = homeOff ? homeOff.avg : LEAGUE_AVG_BA;
+    var awayAvg = awayOff ? awayOff.avg : LEAGUE_AVG_BA;
+    m += clampNum((homeAvg - awayAvg) * 0.6, -0.05, 0.05);
+    // bullpen ERA: a smaller, secondary nudge — the starter still throws the
+    // bulk of a team's innings, so this weighs less than the starter-ERA term
+    if (isFinite(aBullEra) && isFinite(hBullEra)) m += clampNum((aBullEra - hBullEra) * 0.03, -0.045, 0.045);
     m += 0.035;
     return clampNum(m, 0.05, 0.95);
   }
@@ -813,8 +933,9 @@
       .then(function (data) { return { ml: buildEspnMlMap(data), tot: buildEspnTotMap(data) }; })
       .catch(function () { return { ml: {}, tot: {} }; });
 
-    return Promise.all([schedP, fetchMlbStandings(season), espnP, fetchFirstInningRates(), fetchPlaysportMlMap()]).then(function (res) {
-      var sched = res[0], standings = res[1], mlMap = res[2].ml, totMap = res[2].tot, fiRates = res[3], psMap = res[4];
+    return Promise.all([schedP, fetchMlbStandings(season), espnP, fetchFirstInningRates(), fetchPlaysportMlMap(), fetchBullpenEraMap(season)]).then(function (res) {
+      var sched = res[0], standings = res[1], mlMap = res[2].ml, totMap = res[2].tot, fiRates = res[3], psMap = res[4], bullpenMap = res[5];
+      var dynLeagueBullEra = leagueBullpenEra(bullpenMap);
       var games = [];
       (sched.dates || []).forEach(function (d) { games = games.concat(d.games || []); });
       games = games.filter(function (g) {
@@ -853,6 +974,8 @@
           var ppA = g.teams.away.probablePitcher, ppH = g.teams.home.probablePitcher;
           var aSt = ppA ? (seasonStats[ppA.id] || {}) : {};
           var hSt = ppH ? (seasonStats[ppH.id] || {}) : {};
+          var matchup = (extras[gi] && extras[gi].matchup) || {};
+          var aBullEra = bullpenMap[away.id], hBullEra = bullpenMap[home.id];
           var base = {
             league: "MLB",
             away: away.name, home: home.name,
@@ -869,7 +992,7 @@
             if (ps && (!ps.ts || Math.abs(ps.ts - new Date(g.gameDate).getTime()) < 6 * 3600 * 1000)) ml = ps;
           }
           var fair = ml ? fairProbs(ml.a.cur, ml.h.cur) : null;
-          var modelH = mlbModelHome(aRec, hRec, Number(aSt.era), Number(hSt.era));
+          var modelH = mlbModelHome(aRec, hRec, Number(aSt.era), Number(hSt.era), matchup.awayOff, matchup.homeOff, aBullEra, hBullEra);
           if (modelH !== null) {
             var pickHome, edge, prob, market, price;
             if (fair) {
@@ -897,6 +1020,19 @@
             if (ppA && ppH) {
               reasons.push("先發:" + esc(ppA.fullName) + " ERA " + esc(aSt.era || "-") +
                 " vs " + esc(ppH.fullName) + " ERA " + esc(hSt.era || "-") + "。");
+            }
+            if (ppA && ppH && (matchup.awayOff || matchup.homeOff)) {
+              var mlMatchupParts = [];
+              if (matchup.homeOff) mlMatchupParts.push("主隊打線對 " + esc(ppA.fullName) + " 生涯合計打擊率 " +
+                ops3(matchup.homeOff.avg) + "(" + matchup.homeOff.atBats + " 打數)");
+              if (matchup.awayOff) mlMatchupParts.push("客隊打線對 " + esc(ppH.fullName) + " 生涯合計打擊率 " +
+                ops3(matchup.awayOff.avg) + "(" + matchup.awayOff.atBats + " 打數)");
+              reasons.push("先發對戰數據(該先發對戰該隊生涯 + 該隊打者對戰該先發生涯,合併計算):" +
+                mlMatchupParts.join(";") + "。");
+            }
+            if (isFinite(aBullEra) && isFinite(hBullEra)) {
+              reasons.push("牛棚 ERA:客 " + aBullEra.toFixed(2) + " vs 主 " + hBullEra.toFixed(2) +
+                "(聯盟牛棚平均 " + dynLeagueBullEra.toFixed(2) + ")。");
             }
             var edgeStr = "<b>" + (edge >= 0 ? "+" : "") + (edge * 100).toFixed(1) + "%</b>";
             if (fair) {
@@ -972,6 +1108,18 @@
               reasons2.push((weatherFiAdj < 0 ? "天氣條件(高溫或強風吹向外野)對進攻有利" : "強風吹向內野抑制打擊") +
                 "(NRFI " + (weatherFiAdj >= 0 ? "+" : "") + (weatherFiAdj * 100).toFixed(1) + "%)。");
             }
+            if (ppA && ppH && (matchup.awayOff || matchup.homeOff)) {
+              var fiMatchupParts = [];
+              if (matchup.homeOff) fiMatchupParts.push("主隊打線對客隊先發 " + esc(ppA.fullName) + " 生涯合計打擊率 " + ops3(matchup.homeOff.avg));
+              if (matchup.awayOff) fiMatchupParts.push("客隊打線對主隊先發 " + esc(ppH.fullName) + " 生涯合計打擊率 " + ops3(matchup.awayOff.avg));
+              // whole-career line, not first-inning specific, so it only nudges lightly
+              var fiMatchupSignal = (matchup.homeOff ? matchup.homeOff.avg - LEAGUE_AVG_BA : 0) +
+                (matchup.awayOff ? matchup.awayOff.avg - LEAGUE_AVG_BA : 0);
+              var fiMatchupAdj = clampNum(fiMatchupSignal * -0.4, -0.03, 0.03);
+              reasons2.push("先發對戰數據:" + fiMatchupParts.join(";") +
+                (fiMatchupAdj ? "(NRFI " + (fiMatchupAdj >= 0 ? "+" : "") + (fiMatchupAdj * 100).toFixed(1) + "%,非首局專屬數據,僅輕度調整)" : "") + "。");
+              nrfi += fiMatchupAdj;
+            }
             nrfi = clampNum(nrfi, 0.05, 0.95);
             var nrOdds = nrfiOddsMap[away.name + "|" + home.name] || null;
             var pickNrfi, prob2, beNr, priceLabel;
@@ -1033,7 +1181,8 @@
           var totWx = extras[gi] && extras[gi].weather;
           var parkRunAdj = parkTotalRunAdj(totVenue);
           var weatherRunAdj = weatherTotalRunAdj(totWx);
-          var expTot = expectedTotalRuns(aFi, hFi, aSt.era, hSt.era, dynLeagueEra, parkRunAdj, weatherRunAdj);
+          var expTot = expectedTotalRuns(aFi, hFi, aSt.era, hSt.era, dynLeagueEra, parkRunAdj, weatherRunAdj,
+            matchup.awayOff, matchup.homeOff, aBullEra, hBullEra, dynLeagueBullEra);
           if (tot && expTot !== null) {
             var pOver = overProbOf(expTot, tot.line);
             var beO = impliedProb(tot.over), beU = impliedProb(tot.under);
@@ -1050,6 +1199,19 @@
                 reasons3.push("先發 ERA:" + esc(ppA.fullName) + " " + esc(aSt.era || "-") +
                   " vs " + esc(ppH.fullName) + " " + esc(hSt.era || "-") +
                   ",對照聯盟平均 " + dynLeagueEra.toFixed(2) + " 已計入總分調整。");
+              }
+              if (ppA && ppH && (matchup.awayOff || matchup.homeOff)) {
+                var totMatchupParts = [];
+                if (matchup.homeOff) totMatchupParts.push("主隊打線對 " + esc(ppA.fullName) + " 生涯合計打擊率 " +
+                  ops3(matchup.homeOff.avg) + "(" + matchup.homeOff.atBats + " 打數)");
+                if (matchup.awayOff) totMatchupParts.push("客隊打線對 " + esc(ppH.fullName) + " 生涯合計打擊率 " +
+                  ops3(matchup.awayOff.avg) + "(" + matchup.awayOff.atBats + " 打數)");
+                reasons3.push("先發對戰數據(該先發對戰該隊生涯 + 該隊打者對戰該先發生涯,合併計入總分調整):" +
+                  totMatchupParts.join(";") + "。");
+              }
+              if (isFinite(aBullEra) && isFinite(hBullEra)) {
+                reasons3.push("牛棚 ERA:客 " + aBullEra.toFixed(2) + " vs 主 " + hBullEra.toFixed(2) +
+                  ",對照聯盟牛棚平均 " + dynLeagueBullEra.toFixed(2) + " 已計入總分調整。");
               }
               if (parkRunAdj) {
                 reasons3.push("球場「" + esc(totVenue) + "」" + (parkRunAdj > 0 ? "偏打者向,總分預期 +" : "偏投手向,總分預期 ") +
