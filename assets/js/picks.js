@@ -132,6 +132,45 @@
   function overProbOf(expTot, line) {
     return 1 - normCdf((line - expTot) / TOTAL_SD);
   }
+  // Acklam's rational approximation of the inverse normal CDF (probit),
+  // used to turn a moneyline-style win probability into an implied expected
+  // margin so run-line/point-spread cover probabilities can be derived from
+  // the same win-probability models already built for NRFI/總分/獨贏.
+  function invNormCdf(p) {
+    p = clampNum(p, 1e-6, 1 - 1e-6);
+    var a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+      1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+    var b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+      6.680131188771972e+01, -1.328068155288572e+01];
+    var c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+      -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+    var d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+    var plow = 0.02425, phigh = 1 - plow, q, r;
+    if (p < plow) {
+      q = Math.sqrt(-2 * Math.log(p));
+      return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+        ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    }
+    if (p <= phigh) {
+      q = p - 0.5; r = q * q;
+      return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+        (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+    }
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  // Home-team cover probability for a run-line/point-spread market, given only
+  // a moneyline-style home win probability. Assumes the score margin is
+  // Normal(mu, sigma) with mu backed out from winProb via the probit above;
+  // sigma is approximated by the combined-score stdev already used for the
+  // total-runs/total-points model (valid when home/away scoring are roughly
+  // independent, since Var(home-away) = Var(home)+Var(away) = Var(home+away)
+  // in that case). homeLine follows market convention: negative = home favored.
+  function homeCoverProb(winProb, homeLine, sigma) {
+    var mu = sigma * invNormCdf(winProb);
+    return 1 - normCdf((-homeLine - mu) / sigma);
+  }
 
   // ---------- playsport.cc fallback moneyline (台灣運彩盤) ----------
   // The guess page embeds "var vueData = {...}" with every listed game's
@@ -351,6 +390,37 @@
       var home = (comp.competitors || []).find(function (c) { return c.homeAway === "home"; });
       var away = (comp.competitors || []).find(function (c) { return c.homeAway === "away"; });
       if (home && away) map[away.team.displayName + "|" + home.team.displayName] = tot;
+    });
+    return map;
+  }
+
+  // 讓分/point-spread market: ESPN's "pointSpread" object (MLB run line is
+  // almost always ±1.5; NBA/WNBA point spreads vary) — home line + price and
+  // away line + price, prices assumed -110 only if ESPN omits them entirely.
+  function extractSpread(oddsArr) {
+    if (!oddsArr || !oddsArr.length) return null;
+    var o = oddsArr.find(function (x) { return x.pointSpread; }) || oddsArr[0];
+    if (!o.pointSpread) return null;
+    function side(s) {
+      var x = o.pointSpread[s];
+      if (!x || !x.close) return null;
+      var line = Number(x.close.line);
+      return isFinite(line) ? { line: line, price: x.close.odds || NRFI_PRICE } : null;
+    }
+    var h = side("home"), a = side("away");
+    if (!h || !a) return null;
+    return { home: h, away: a };
+  }
+  function buildEspnSpreadMap(data) {
+    var map = {};
+    (data.events || []).forEach(function (ev) {
+      var comp = ev.competitions && ev.competitions[0];
+      if (!comp) return;
+      var sp = extractSpread(comp.odds);
+      if (!sp) return;
+      var home = (comp.competitors || []).find(function (c) { return c.homeAway === "home"; });
+      var away = (comp.competitors || []).find(function (c) { return c.homeAway === "away"; });
+      if (home && away) map[away.team.displayName + "|" + home.team.displayName] = sp;
     });
     return map;
   }
@@ -930,11 +1000,11 @@
     var season = Number(today.slice(0, 4));
     var schedP = fetchJson("https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=" + today + "&hydrate=probablePitcher,team");
     var espnP = fetchJson("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=" + today.replace(/-/g, ""))
-      .then(function (data) { return { ml: buildEspnMlMap(data), tot: buildEspnTotMap(data) }; })
-      .catch(function () { return { ml: {}, tot: {} }; });
+      .then(function (data) { return { ml: buildEspnMlMap(data), tot: buildEspnTotMap(data), spread: buildEspnSpreadMap(data) }; })
+      .catch(function () { return { ml: {}, tot: {}, spread: {} }; });
 
     return Promise.all([schedP, fetchMlbStandings(season), espnP, fetchFirstInningRates(), fetchPlaysportMlMap(), fetchBullpenEraMap(season)]).then(function (res) {
-      var sched = res[0], standings = res[1], mlMap = res[2].ml, totMap = res[2].tot, fiRates = res[3], psMap = res[4], bullpenMap = res[5];
+      var sched = res[0], standings = res[1], mlMap = res[2].ml, totMap = res[2].tot, spreadMap = res[2].spread, fiRates = res[3], psMap = res[4], bullpenMap = res[5];
       var dynLeagueBullEra = leagueBullpenEra(bullpenMap);
       var games = [];
       (sched.dates || []).forEach(function (d) { games = games.concat(d.games || []); });
@@ -1056,6 +1126,40 @@
               edge: edge,
               reasons: reasons,
             }));
+
+            // -- 讓分(Run Line,MLB 慣例 ±1.5)--
+            // No independent run-differential model is built; the moneyline
+            // win probability above is projected onto a margin distribution
+            // (see homeCoverProb) to price the run line off the same inputs.
+            var sp = spreadMap[away.name + "|" + home.name];
+            if (sp) {
+              var pHomeCover = homeCoverProb(modelH, sp.home.line, TOTAL_SD);
+              var beHomeSp = impliedProb(sp.home.price), beAwaySp = impliedProb(sp.away.price);
+              if (beHomeSp !== null && beAwaySp !== null) {
+                var edgeHomeSp = pHomeCover - beHomeSp, edgeAwaySp = (1 - pHomeCover) - beAwaySp;
+                var pickHomeSp = edgeHomeSp >= edgeAwaySp;
+                var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
+                var beSp = pickHomeSp ? beHomeSp : beAwaySp;
+                var lineSp = pickHomeSp ? sp.home.line : sp.away.line;
+                var priceSp = pickHomeSp ? sp.home.price : sp.away.price;
+                var reasonsSp = [
+                  "模型獨贏勝率 <b>" + pctStr(modelH) + "</b>(主)反推期望分差(常態分布近似,標準差取自大小分模型的總分標準差,詳見程式註解),估計" +
+                    (pickHomeSp ? "主" : "客") + "隊讓分 " + (lineSp >= 0 ? "+" : "") + lineSp +
+                    " 覆蓋機率 <b>" + pctStr(probSp) + "</b>。",
+                  "以 " + esc(priceSp) + " 計損益兩平 " + pctStr(beSp) + ",優勢 <b>" +
+                    ((probSp - beSp) >= 0 ? "+" : "") + ((probSp - beSp) * 100).toFixed(1) + "%</b>。",
+                ];
+                candidates.push(Object.assign({}, base, {
+                  type: "spread",
+                  pick: (pickHomeSp ? home.name : away.name) + " " + (lineSp >= 0 ? "+" : "") + lineSp,
+                  price: String(priceSp),
+                  prob: probSp,
+                  market: beSp,
+                  edge: probSp - beSp,
+                  reasons: reasonsSp,
+                }));
+              }
+            }
           }
 
           // -- NRFI / YRFI --
@@ -1297,8 +1401,159 @@
       .catch(function () { return []; });
   }
 
+  // ---------- WNBA data (edge = own record/scoring model vs. market) ----------
+  // ESPN's free WNBA predictor endpoint only exposes a relative-strength
+  // "gameProjection" percentage (same as NBA above), not a projected score, so
+  // it can't drive 大小分/讓分. Team win-loss + scoring standings are used
+  // instead to build an independent win-probability and expected-total model,
+  // the same way collectMlb() does from MLB Stats API standings/splits.
+  var WNBA_TOTAL_SD = 15; // approx combined-score stdev; also used as the margin-SD proxy in homeCoverProb (see its comment)
+  function parseWnbaLastTen(summary) {
+    if (!summary) return null;
+    var parts = String(summary).split("-");
+    var w = Number(parts[0]), l = Number(parts[1]);
+    return (w + l) > 0 ? w / (w + l) : null;
+  }
+  function fetchWnbaStandings() {
+    return fetchJson("https://site.api.espn.com/apis/v2/sports/basketball/wnba/standings?level=3")
+      .then(function (d) {
+        var map = {};
+        (d.children || []).forEach(function (grp) {
+          ((grp.standings && grp.standings.entries) || []).forEach(function (e) {
+            var teamId = e.team && e.team.id;
+            if (!teamId) return;
+            var stat = { wins: null, losses: null, winPct: null, avgPointsFor: null, avgPointsAgainst: null, lastTen: null };
+            (e.stats || []).forEach(function (s) {
+              if (s.name === "wins") stat.wins = numOr(s.value);
+              else if (s.name === "losses") stat.losses = numOr(s.value);
+              else if (s.name === "winPercent") stat.winPct = numOr(s.value);
+              else if (s.name === "avgPointsFor") stat.avgPointsFor = numOr(s.value);
+              else if (s.name === "avgPointsAgainst") stat.avgPointsAgainst = numOr(s.value);
+              else if (s.type === "lasttengames") stat.lastTen = s.summary || s.displayValue || null;
+            });
+            stat.lastTenPct = parseWnbaLastTen(stat.lastTen);
+            map[teamId] = stat;
+          });
+        });
+        return map;
+      })
+      .catch(function () { return {}; });
+  }
+  // same blend mlbModelHome() uses (record share + last-10 share), plus a
+  // scoring-differential nudge in place of starter ERA, plus flat home-court edge
+  function wnbaModelHome(aRec, hRec) {
+    if (!aRec || !hRec || aRec.winPct === null || hRec.winPct === null) return null;
+    var comps = [];
+    if (aRec.winPct + hRec.winPct > 0) comps.push(hRec.winPct / (aRec.winPct + hRec.winPct));
+    if (aRec.lastTenPct !== null && hRec.lastTenPct !== null && aRec.lastTenPct + hRec.lastTenPct > 0) {
+      comps.push(hRec.lastTenPct / (aRec.lastTenPct + hRec.lastTenPct));
+    }
+    if (!comps.length) return null;
+    var m = comps.reduce(function (x, y) { return x + y; }, 0) / comps.length;
+    if (aRec.avgPointsFor !== null && hRec.avgPointsFor !== null && aRec.avgPointsAgainst !== null && hRec.avgPointsAgainst !== null) {
+      var aDiff = aRec.avgPointsFor - aRec.avgPointsAgainst, hDiff = hRec.avgPointsFor - hRec.avgPointsAgainst;
+      m += clampNum((hDiff - aDiff) * 0.008, -0.1, 0.1);
+    }
+    m += 0.04; // home-court edge
+    return clampNum(m, 0.05, 0.95);
+  }
+  function expectedWnbaTotal(aRec, hRec) {
+    if (!aRec || !hRec || aRec.avgPointsFor === null || hRec.avgPointsFor === null) return null;
+    return clampNum((aRec.avgPointsFor + hRec.avgPointsAgainst) / 2 + (hRec.avgPointsFor + aRec.avgPointsAgainst) / 2, 120, 220);
+  }
+
+  function collectWnba() {
+    var ymd = usTodayISO().replace(/-/g, "");
+    return Promise.all([
+      fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=" + ymd),
+      fetchWnbaStandings(),
+    ]).then(function (res) {
+      var data = res[0], standings = res[1];
+      var totMap = buildEspnTotMap(data), spreadMap = buildEspnSpreadMap(data);
+      var pend = (data.events || []).filter(function (ev) {
+        var st = ev.competitions && ev.competitions[0] && ev.competitions[0].status;
+        return st && st.type && st.type.state === "pre";
+      });
+      var candidates = [];
+      pend.forEach(function (ev) {
+        var comp = ev.competitions[0];
+        var home = (comp.competitors || []).find(function (c) { return c.homeAway === "home"; });
+        var away = (comp.competitors || []).find(function (c) { return c.homeAway === "away"; });
+        if (!home || !away) return;
+        var aRec = standings[away.team.id], hRec = standings[home.team.id];
+        var modelH = wnbaModelHome(aRec, hRec);
+        var base = { league: "WNBA", away: away.team.displayName, home: home.team.displayName, start: ev.date };
+        var key = away.team.displayName + "|" + home.team.displayName;
+
+        // -- 大小分 --
+        var tot = totMap[key];
+        var expTot = expectedWnbaTotal(aRec, hRec);
+        if (tot && expTot !== null) {
+          var pOver = 1 - normCdf((tot.line - expTot) / WNBA_TOTAL_SD);
+          var beO = impliedProb(tot.over), beU = impliedProb(tot.under);
+          if (beO !== null && beU !== null) {
+            var edgeO = pOver - beO, edgeU = (1 - pOver) - beU;
+            var pickOver = edgeO >= edgeU;
+            var probT = pickOver ? pOver : 1 - pOver;
+            var beT = pickOver ? beO : beU;
+            var reasons3 = [
+              "客隊場均得 " + aRec.avgPointsFor.toFixed(1) + " 分/失 " + aRec.avgPointsAgainst.toFixed(1) +
+                " 分;主隊場均得 " + hRec.avgPointsFor.toFixed(1) + " 分/失 " + hRec.avgPointsAgainst.toFixed(1) + " 分。",
+              "模型預期總分 <b>" + expTot.toFixed(1) + "</b> 分 vs 盤口總分線 <b>" + tot.line +
+                "</b>,估計大分機率 " + pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + "。",
+              "取優勢較高的「" + (pickOver ? "大分" : "小分") + "」:機率 <b>" + pctStr(probT) +
+                "</b>,以 " + esc(pickOver ? tot.over : tot.under) + " 計損益兩平 " + pctStr(beT) +
+                ",優勢 <b>" + ((probT - beT) >= 0 ? "+" : "") + ((probT - beT) * 100).toFixed(1) + "%</b>。",
+            ];
+            if (!tot.real) reasons3.push("ESPN 僅開出總分線、尚未開出大小分價位,暫以 -110 參考水位估算,開盤後請以實際賠率為準。");
+            candidates.push(Object.assign({}, base, {
+              type: pickOver ? "over" : "under",
+              pick: (pickOver ? "大分 Over " : "小分 Under ") + tot.line,
+              price: (pickOver ? tot.over : tot.under) + (tot.real ? "" : "(參考)"),
+              prob: probT, market: beT, edge: probT - beT,
+              reasons: reasons3,
+            }));
+          }
+        }
+
+        // -- 讓分 --
+        var sp = spreadMap[key];
+        if (sp && modelH !== null) {
+          var pHomeCover = homeCoverProb(modelH, sp.home.line, WNBA_TOTAL_SD);
+          var beHomeSp = impliedProb(sp.home.price), beAwaySp = impliedProb(sp.away.price);
+          if (beHomeSp !== null && beAwaySp !== null) {
+            var edgeHomeSp = pHomeCover - beHomeSp, edgeAwaySp = (1 - pHomeCover) - beAwaySp;
+            var pickHomeSp = edgeHomeSp >= edgeAwaySp;
+            var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
+            var beSp = pickHomeSp ? beHomeSp : beAwaySp;
+            var lineSp = pickHomeSp ? sp.home.line : sp.away.line;
+            var priceSp = pickHomeSp ? sp.home.price : sp.away.price;
+            var reasonsSp = [
+              "戰績:客 " + aRec.wins + "-" + aRec.losses + " vs 主 " + hRec.wins + "-" + hRec.losses +
+                ";場均得失分差:客 " + (aRec.avgPointsFor - aRec.avgPointsAgainst).toFixed(1) +
+                " vs 主 " + (hRec.avgPointsFor - hRec.avgPointsAgainst).toFixed(1) + "。",
+              "模型獨贏勝率 <b>" + pctStr(modelH) + "</b>(主)反推期望分差,估計" +
+                (pickHomeSp ? "主" : "客") + "隊讓分 " + (lineSp >= 0 ? "+" : "") + lineSp +
+                " 覆蓋機率 <b>" + pctStr(probSp) + "</b>。",
+              "以 " + esc(priceSp) + " 計損益兩平 " + pctStr(beSp) + ",優勢 <b>" +
+                ((probSp - beSp) >= 0 ? "+" : "") + ((probSp - beSp) * 100).toFixed(1) + "%</b>。",
+            ];
+            candidates.push(Object.assign({}, base, {
+              type: "spread",
+              pick: (pickHomeSp ? home.team.displayName : away.team.displayName) + " " + (lineSp >= 0 ? "+" : "") + lineSp,
+              price: String(priceSp),
+              prob: probSp, market: beSp, edge: probSp - beSp,
+              reasons: reasonsSp,
+            }));
+          }
+        }
+      });
+      return candidates;
+    }).catch(function () { return []; });
+  }
+
   // ---------- render ----------
-  var TYPE_LABEL = { ml: "獨贏", nrfi: "首局 NRFI", yrfi: "首局 YRFI", over: "大分", under: "小分" };
+  var TYPE_LABEL = { ml: "獨贏", nrfi: "首局 NRFI", yrfi: "首局 YRFI", over: "大分", under: "小分", spread: "讓分" };
 
   function pickCardHtml(c, rank) {
     var kelly = halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
@@ -1355,8 +1610,9 @@
     var vetoed = fiAll.filter(function (c) { return c.veto; });
     var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byEdge);
     var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byEdge);
+    var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byEdge);
 
-    if (!fiAll.length && !ml.length && !ou.length) {
+    if (!fiAll.length && !ml.length && !ou.length && !sp.length) {
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
       return;
     }
@@ -1369,13 +1625,15 @@
     var mainHtml =
       sectionHtml("⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
       vetoHtml +
-      sectionHtml("📊 大小分(MLB 全場總分 Over/Under)", ou.slice(0, TOP_N), ou.length) +
+      sectionHtml("📊 大小分(MLB 全場總分 / WNBA 大小分 Over/Under)", ou.slice(0, TOP_N), ou.length) +
+      sectionHtml("🎯 讓分(MLB Run Line / WNBA Spread)", sp.slice(0, TOP_N), sp.length) +
       sectionHtml("🏆 獨贏勝率(MLB / NBA)", ml.slice(0, TOP_N), ml.length);
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
-      '共掃描 <b>' + candidates.length + '</b> 個候選,分為「首局 NRFI/YRFI」「大小分」與「獨贏勝率」三區,' +
+      '共掃描 <b>' + candidates.length + '</b> 個候選,分為「首局 NRFI/YRFI」「大小分」「讓分」與「獨贏勝率」四區,' +
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
+      '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
       (keySet ? "🔑 NRFI/YRFI 實際賠率已啟用(The Odds API;點此更換金鑰)"
@@ -1403,8 +1661,9 @@
     Promise.all([
       collectMlb().catch(function () { return []; }),
       collectNba(),
+      collectWnba(),
     ]).then(function (res) {
-      render(res[0].concat(res[1]));
+      render(res[0].concat(res[1]).concat(res[2]));
       document.getElementById("updatedAt").textContent =
         "計算於 " + new Date().toLocaleTimeString("zh-TW", { hour12: false });
     }).catch(function (err) {
