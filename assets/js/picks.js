@@ -1586,16 +1586,18 @@
   }
 
   function sectionHtml(title, list, total) {
-    var html = '<h2 class="picks-section-title">' + title +
-      '<span class="picks-section-count">候選 ' + total + ' 注</span></h2>';
+    var head = '<summary class="picks-section-title">' + title +
+      '<span class="picks-section-count">候選 ' + total + ' 注</span></summary>';
+    var body;
     if (!list.length) {
-      return html + '<div class="empty-state">此類別今天沒有可分析的未開賽場次。</div>';
+      body = '<div class="empty-state">此類別今天沒有可分析的未開賽場次。</div>';
+    } else {
+      body = list.map(function (c, i) { return pickCardHtml(c, i + 1); }).join("");
+      if (total < TOP_N) {
+        body += '<p class="detail-note">此類別今日可分析的候選僅 ' + total + ' 注,已全部列出。</p>';
+      }
     }
-    html += list.map(function (c, i) { return pickCardHtml(c, i + 1); }).join("");
-    if (total < TOP_N) {
-      html += '<p class="detail-note">此類別今日可分析的候選僅 ' + total + ' 注,已全部列出。</p>';
-    }
-    return html;
+    return '<details class="picks-section" open>' + head + '<div class="picks-section-body">' + body + '</div></details>';
   }
 
   function render(candidates) {
@@ -1611,6 +1613,12 @@
     var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byEdge);
     var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byEdge);
     var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byEdge);
+    var ouMlb = ou.filter(function (c) { return c.league === "MLB"; });
+    var ouWnba = ou.filter(function (c) { return c.league === "WNBA"; });
+    var spMlb = sp.filter(function (c) { return c.league === "MLB"; });
+    var spWnba = sp.filter(function (c) { return c.league === "WNBA"; });
+    var mlMlb = ml.filter(function (c) { return c.league === "MLB"; });
+    var mlNba = ml.filter(function (c) { return c.league === "NBA"; });
 
     if (!fiAll.length && !ml.length && !ou.length && !sp.length) {
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
@@ -1625,12 +1633,15 @@
     var mainHtml =
       sectionHtml("⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
       vetoHtml +
-      sectionHtml("📊 大小分(MLB 全場總分 / WNBA 大小分 Over/Under)", ou.slice(0, TOP_N), ou.length) +
-      sectionHtml("🎯 讓分(MLB Run Line / WNBA Spread)", sp.slice(0, TOP_N), sp.length) +
-      sectionHtml("🏆 獨贏勝率(MLB / NBA)", ml.slice(0, TOP_N), ml.length);
+      sectionHtml("📊 大小分・MLB 全場總分 Over/Under", ouMlb.slice(0, TOP_N), ouMlb.length) +
+      sectionHtml("📊 大小分・WNBA Over/Under", ouWnba.slice(0, TOP_N), ouWnba.length) +
+      sectionHtml("🎯 讓分・MLB Run Line", spMlb.slice(0, TOP_N), spMlb.length) +
+      sectionHtml("🎯 讓分・WNBA Spread", spWnba.slice(0, TOP_N), spWnba.length) +
+      sectionHtml("🏆 獨贏勝率・MLB", mlMlb.slice(0, TOP_N), mlMlb.length) +
+      sectionHtml("🏆 獨贏勝率・NBA", mlNba.slice(0, TOP_N), mlNba.length);
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
-      '共掃描 <b>' + candidates.length + '</b> 個候選,分為「首局 NRFI/YRFI」「大小分」「讓分」與「獨贏勝率」四區,' +
+      '共掃描 <b>' + candidates.length + '</b> 個候選,分為「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」四類,各類再依聯盟(MLB／WNBA／NBA)分開列出,' +
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
