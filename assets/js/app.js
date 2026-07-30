@@ -19,7 +19,7 @@
     lastUpdatedStr: null,
   };
 
-  var modal = { game: null, timer: null };
+  var modal = { game: null };
   var sectionCache = {};
   var mlbFormCache = { t: 0, map: null };
 
@@ -961,60 +961,7 @@
         recordText(gd.teams && gd.teams.home)
       );
 
-      if (game.status === "scheduled" || game.status === "postponed") {
-        return renderMlbPreview(game, gd, ld, html, body);
-      }
-
-      // line score
-      var ls = ld.linescore || {};
-      var innings = ls.innings || [];
-      if (innings.length > 0) {
-        var head = '<tr><th>隊伍</th>';
-        innings.forEach(function (inn) {
-          var cls = (game.status === "live" && ls.currentInning === inn.num) ? ' class="current-inning"' : "";
-          head += '<th' + cls + '>' + inn.num + '</th>';
-        });
-        head += '<th>R</th><th>H</th><th>E</th></tr>';
-
-        function lsRow(name, side) {
-          var row = '<tr><td>' + esc(name) + '</td>';
-          innings.forEach(function (inn) {
-            var v = inn[side] && inn[side].runs !== undefined ? inn[side].runs : "-";
-            row += '<td>' + esc(v) + '</td>';
-          });
-          var tot = (ls.teams && ls.teams[side]) || {};
-          row += '<td><b>' + esc(tot.runs !== undefined ? tot.runs : "-") + '</b></td>' +
-                 '<td>' + esc(tot.hits !== undefined ? tot.hits : "-") + '</td>' +
-                 '<td>' + esc(tot.errors !== undefined ? tot.errors : "-") + '</td></tr>';
-          return row;
-        }
-        html += sectionBlock("逐局比分",
-          '<div class="table-wrap"><table class="stat-table">' + head +
-          lsRow(game.away.name, "away") + lsRow(game.home.name, "home") +
-          '</table></div>');
-      }
-
-      // decisions
-      var dec = ld.decisions;
-      if (dec && (dec.winner || dec.loser || dec.save)) {
-        var parts = [];
-        if (dec.winner) parts.push("勝投 <b>" + esc(dec.winner.fullName) + "</b>");
-        if (dec.loser) parts.push("敗投 <b>" + esc(dec.loser.fullName) + "</b>");
-        if (dec.save) parts.push("救援 <b>" + esc(dec.save.fullName) + "</b>");
-        html += sectionBlock("投手勝敗", '<div class="analysis-box"><p>' + parts.join("、") + '</p></div>');
-      }
-
-      // player stats
-      var box = ld.boxscore && ld.boxscore.teams;
-      if (box) {
-        html += mlbBattingSection(game.away.name + " 打擊", box.away);
-        html += mlbPitchingSection(game.away.name + " 投手", box.away);
-        html += mlbBattingSection(game.home.name + " 打擊", box.home);
-        html += mlbPitchingSection(game.home.name + " 投手", box.home);
-      }
-
-      html += oddsDetailHtml(game);
-      body.innerHTML = html;
+      return renderMlbPreview(game, gd, ld, html, body);
     });
   }
 
@@ -1024,49 +971,6 @@
     return r.wins + "勝" + r.losses + "敗";
   }
 
-  function mlbBattingSection(title, teamBox) {
-    var ids = (teamBox && teamBox.batters) || [];
-    if (!ids.length) return "";
-    var rows = "";
-    ids.forEach(function (pid) {
-      var p = teamBox.players["ID" + pid];
-      if (!p || !p.stats || !p.stats.batting || p.stats.batting.atBats === undefined) return;
-      var b = p.stats.batting;
-      if ((b.atBats || 0) === 0 && (b.baseOnBalls || 0) === 0 && (b.hitByPitch || 0) === 0 && (b.sacFlies || 0) === 0) return;
-      var season = (p.seasonStats && p.seasonStats.batting) || {};
-      rows += '<tr><td>' + esc(p.person.fullName) + ' <span class="starter-mark">' + esc(p.position ? p.position.abbreviation : "") + '</span></td>' +
-        '<td>' + (b.atBats || 0) + '</td><td>' + (b.runs || 0) + '</td><td>' + (b.hits || 0) + '</td>' +
-        '<td>' + (b.rbi || 0) + '</td><td>' + (b.baseOnBalls || 0) + '</td><td>' + (b.strikeOuts || 0) + '</td>' +
-        '<td>' + esc(season.avg || "-") + '</td></tr>';
-    });
-    if (!rows) return "";
-    return sectionBlock(title,
-      '<div class="table-wrap"><table class="stat-table">' +
-      '<tr><th>球員</th><th>打數</th><th>得分</th><th>安打</th><th>打點</th><th>四壞</th><th>三振</th><th>打擊率</th></tr>' +
-      rows + '</table></div>');
-  }
-
-  function mlbPitchingSection(title, teamBox) {
-    var ids = (teamBox && teamBox.pitchers) || [];
-    if (!ids.length) return "";
-    var rows = "";
-    ids.forEach(function (pid) {
-      var p = teamBox.players["ID" + pid];
-      if (!p || !p.stats || !p.stats.pitching || p.stats.pitching.inningsPitched === undefined) return;
-      var s = p.stats.pitching;
-      var season = (p.seasonStats && p.seasonStats.pitching) || {};
-      var note = s.note ? ' <span class="starter-mark">' + esc(s.note) + '</span>' : "";
-      rows += '<tr><td>' + esc(p.person.fullName) + note + '</td>' +
-        '<td>' + esc(s.inningsPitched || "0") + '</td><td>' + (s.hits || 0) + '</td><td>' + (s.runs || 0) + '</td>' +
-        '<td>' + (s.earnedRuns || 0) + '</td><td>' + (s.baseOnBalls || 0) + '</td><td>' + (s.strikeOuts || 0) + '</td>' +
-        '<td>' + esc(season.era || "-") + '</td></tr>';
-    });
-    if (!rows) return "";
-    return sectionBlock(title,
-      '<div class="table-wrap"><table class="stat-table">' +
-      '<tr><th>球員</th><th>局數</th><th>被安打</th><th>失分</th><th>自責分</th><th>四壞</th><th>三振</th><th>ERA</th></tr>' +
-      rows + '</table></div>');
-  }
 
   function mlbLineupSection(title, teamBox) {
     var ids = (teamBox && teamBox.batters) || [];
@@ -1486,77 +1390,7 @@
       }
       var html = detailHeaderHtml(game, rec(awayC), rec(homeC));
 
-      if (game.status === "scheduled" || game.status === "postponed") {
-        html += nbaPreviewSections(game, s, awayC, homeC);
-        html += oddsDetailHtml(game);
-        body.innerHTML = html;
-        return;
-      }
-
-      // quarter line score
-      var aLs = awayC.linescores || [];
-      var hLs = homeC.linescores || [];
-      var n = Math.max(aLs.length, hLs.length);
-      if (n > 0) {
-        var head = '<tr><th>隊伍</th>';
-        for (var i = 0; i < n; i++) head += '<th>' + (i < 4 ? "Q" + (i + 1) : "OT" + (i - 3)) + '</th>';
-        head += '<th>總分</th></tr>';
-        function qRow(name, ls, total) {
-          var row = '<tr><td>' + esc(name) + '</td>';
-          for (var i = 0; i < n; i++) {
-            row += '<td>' + esc(ls[i] ? ls[i].displayValue : "-") + '</td>';
-          }
-          row += '<td><b>' + esc(total) + '</b></td></tr>';
-          return row;
-        }
-        html += sectionBlock("逐節比分",
-          '<div class="table-wrap"><table class="stat-table">' + head +
-          qRow(game.away.name, aLs, scoreText(game.away.score)) +
-          qRow(game.home.name, hLs, scoreText(game.home.score)) +
-          '</table></div>');
-      }
-
-      // player stats
-      var teams = (s.boxscore && s.boxscore.players) || [];
-      teams.forEach(function (t) {
-        var stat = t.statistics && t.statistics[0];
-        if (!stat || !stat.athletes) return;
-        var names = stat.names || [];
-        var cols = ["MIN", "PTS", "REB", "AST", "STL", "BLK", "FG", "3PT", "+/-"];
-        var colIdx = cols.map(function (c) { return names.indexOf(c); });
-        var zhCols = { MIN: "分鐘", PTS: "得分", REB: "籃板", AST: "助攻", STL: "抄截", BLK: "阻攻", FG: "投籃", "3PT": "三分", "+/-": "+/-" };
-
-        var head = '<tr><th>球員</th>' + cols.map(function (c) { return '<th>' + zhCols[c] + '</th>'; }).join("") + '</tr>';
-        var rows = "";
-        stat.athletes.forEach(function (a) {
-          if (!a.stats || a.stats.length === 0) return;
-          var starter = a.starter ? ' <span class="starter-mark">先發</span>' : "";
-          rows += '<tr><td>' + esc(a.athlete.displayName) + starter + '</td>' +
-            colIdx.map(function (idx) { return '<td>' + esc(idx >= 0 ? a.stats[idx] : "-") + '</td>'; }).join("") + '</tr>';
-        });
-        if (rows) {
-          html += sectionBlock(t.team.displayName + " 球員數據",
-            '<div class="table-wrap"><table class="stat-table">' + head + rows + '</table></div>');
-        }
-      });
-
-      // game leaders
-      var leaders = s.leaders || [];
-      if (leaders.length) {
-        var lRows = "";
-        leaders.forEach(function (teamLeaders) {
-          (teamLeaders.leaders || []).forEach(function (cat) {
-            if (["points", "rebounds", "assists"].indexOf(cat.name) === -1) return;
-            var top = cat.leaders && cat.leaders[0];
-            if (!top) return;
-            var zh = { points: "得分", rebounds: "籃板", assists: "助攻" }[cat.name];
-            lRows += '<li><span>' + esc(teamLeaders.team ? teamLeaders.team.abbreviation : "") + " " + zh + ":<b>" +
-              esc(top.athlete.displayName) + "</b></span><span>" + esc(top.displayValue) + "</span></li>";
-          });
-        });
-        if (lRows) html += sectionBlock("數據領先者", '<ul class="injury-list">' + lRows + '</ul>');
-      }
-
+      html += nbaPreviewSections(game, s, awayC, homeC);
       html += oddsDetailHtml(game);
       body.innerHTML = html;
     });
@@ -1659,18 +1493,10 @@
       detailHeaderHtml(game, null, null) +
       '<div class="detail-loading"><div class="spinner"></div>載入詳細資料中…</div>';
     loadDetail(game);
-
-    if (modal.timer) clearInterval(modal.timer);
-    if (game.status === "live") {
-      modal.timer = setInterval(function () {
-        if (!document.hidden && modal.game) loadDetail(modal.game);
-      }, 15000);
-    }
   }
 
   function closeDetail() {
     modal.game = null;
-    if (modal.timer) { clearInterval(modal.timer); modal.timer = null; }
     var m = document.getElementById("modal");
     m.classList.add("hidden");
     m.setAttribute("aria-hidden", "true");
