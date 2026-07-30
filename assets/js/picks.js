@@ -1600,6 +1600,12 @@
     return '<details class="picks-section" open>' + head + '<div class="picks-section-body">' + body + '</div></details>';
   }
 
+  function leagueSectionHtml(icon, title, total, subHtml) {
+    var head = '<summary class="picks-league-title">' + icon + " " + title +
+      '<span class="picks-league-count">共 ' + total + ' 項候選</span></summary>';
+    return '<details class="picks-league-section" open>' + head + '<div class="picks-league-body">' + subHtml + '</div></details>';
+  }
+
   function render(candidates) {
     var el = document.getElementById("picksContent");
     var now = Date.now();
@@ -1630,18 +1636,24 @@
         vetoed.map(function (c) { return pickCardHtml(c, "✗"); }).join("") + '</details>'
       : "";
     var keySet = !!getOddsApiKey();
-    var mainHtml =
+    var mlbSubHtml =
       sectionHtml("⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
       vetoHtml +
-      sectionHtml("📊 大小分・MLB 全場總分 Over/Under", ouMlb.slice(0, TOP_N), ouMlb.length) +
-      sectionHtml("📊 大小分・WNBA Over/Under", ouWnba.slice(0, TOP_N), ouWnba.length) +
-      sectionHtml("🎯 讓分・MLB Run Line", spMlb.slice(0, TOP_N), spMlb.length) +
-      sectionHtml("🎯 讓分・WNBA Spread", spWnba.slice(0, TOP_N), spWnba.length) +
-      sectionHtml("🏆 獨贏勝率・MLB", mlMlb.slice(0, TOP_N), mlMlb.length) +
-      sectionHtml("🏆 獨贏勝率・NBA", mlNba.slice(0, TOP_N), mlNba.length);
+      sectionHtml("📊 大小分 Over/Under", ouMlb.slice(0, TOP_N), ouMlb.length) +
+      sectionHtml("🎯 讓分 Run Line", spMlb.slice(0, TOP_N), spMlb.length) +
+      sectionHtml("🏆 獨贏勝率", mlMlb.slice(0, TOP_N), mlMlb.length);
+    var wnbaSubHtml =
+      sectionHtml("📊 大小分 Over/Under", ouWnba.slice(0, TOP_N), ouWnba.length) +
+      sectionHtml("🎯 讓分 Spread", spWnba.slice(0, TOP_N), spWnba.length);
+    var nbaSubHtml =
+      sectionHtml("🏆 獨贏勝率", mlNba.slice(0, TOP_N), mlNba.length);
+    var mainHtml =
+      leagueSectionHtml("⚾", "MLB", fi.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
+      leagueSectionHtml("🏀", "WNBA", ouWnba.length + spWnba.length, wnbaSubHtml) +
+      leagueSectionHtml("🏀", "NBA", mlNba.length, nbaSubHtml);
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
-      '共掃描 <b>' + candidates.length + '</b> 個候選,分為「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」四類,各類再依聯盟(MLB／WNBA／NBA)分開列出,' +
+      '共掃描 <b>' + candidates.length + '</b> 個候選,先依聯盟(MLB／WNBA／NBA)分組,各聯盟下再分「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」等類別,' +
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
