@@ -87,6 +87,31 @@
       })
       .catch(function () { return []; });
   }
+  // KBO/NPB have no ESPN feed; their schedule comes from The Odds API's
+  // events-only endpoint (no markets param = free, doesn't touch the shared
+  // quota) — mirrors assets/js/picks.js's key handling so a custom key set
+  // there is honored here too
+  var DEFAULT_ODDS_API_KEY = "3fc688e03b27b3d41eb04f761c7f58c3";
+  function getOddsApiKey() {
+    try { return localStorage.getItem("oddsApiKey") || DEFAULT_ODDS_API_KEY; } catch (e) { return DEFAULT_ODDS_API_KEY; }
+  }
+  function fetchOddsApiGames(sportKey, leagueLabel) {
+    var key = getOddsApiKey();
+    if (!key) return Promise.resolve([]);
+    return fetchJson("https://api.the-odds-api.com/v4/sports/" + sportKey + "/events?apiKey=" + encodeURIComponent(key))
+      .then(function (events) {
+        var now = Date.now();
+        return (events || []).filter(function (ev) {
+          return ev.commence_time && new Date(ev.commence_time).getTime() > now;
+        }).map(function (ev) {
+          return {
+            league: leagueLabel, away: ev.away_team, home: ev.home_team,
+            start: ev.commence_time, gid: leagueLabel.toLowerCase() + "-" + ev.id,
+          };
+        });
+      })
+      .catch(function () { return []; });
+  }
 
   // ---------- market movement aggregation ----------
   var lineHistCache = {};
@@ -152,6 +177,8 @@
   function leagueFileKey(lg) {
     if (lg === "NBA") return "nba";
     if (lg === "WNBA") return "wnba";
+    if (lg === "KBO") return "kbo";
+    if (lg === "NPB") return "npb";
     return "mlb";
   }
 
@@ -199,7 +226,11 @@
 
   // ---------- render ----------
   function gameHref(gid) {
-    return gid ? "index.html?game=" + encodeURIComponent(gid) : null;
+    // index.html's game-detail modal only knows MLB/NBA/WNBA — KBO/NPB games
+    // render as plain (non-clickable) rows instead of linking to a page that
+    // can't show them
+    if (!gid || gid.indexOf("kbo-") === 0 || gid.indexOf("npb-") === 0) return null;
+    return "index.html?game=" + encodeURIComponent(gid);
   }
   // wraps a mover row's content in a link to that game's analysis page when
   // we have its id; falls back to a plain (non-clickable) row otherwise
@@ -224,8 +255,8 @@
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽賽事(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
       return;
     }
-    var html = '<div class="analysis-box"><p>已掃描 <b>' + res.scanned + '</b> 場今日未開賽賽事,比對每場最早與最新一筆賠率紀錄' +
-      '(伺服器每約 4 小時擷取一次),統計資金與盤口越來越看好的方向。動能清單僅列出隱含機率變動 ≥1 個百分點的場次。</p></div>';
+    var html = '<div class="analysis-box"><p>已掃描 <b>' + res.scanned + '</b> 場今日未開賽賽事(MLB／NBA／WNBA／KBO／NPB),比對每場最早與最新一筆賠率紀錄' +
+      '(MLB/NBA/WNBA 伺服器每 20 分鐘擷取一次;KBO/NPB 因共用 The Odds API 配額,每約 4 小時才擷取一次,且僅追蹤獨贏,無大小分/讓分走勢),統計資金與盤口越來越看好的方向。動能清單僅列出隱含機率變動 ≥1 個百分點的場次。</p></div>';
 
     if (!res.mlMoves.length && !res.totMoves.length && !res.lineMoves.length) {
       html += '<div class="empty-state">賠率歷史樣本不足或變動不明顯,稍後再回來看。</div>';
@@ -296,8 +327,10 @@
       fetchMlbGames(),
       fetchEspnGames("nba", "NBA"),
       fetchEspnGames("wnba", "WNBA"),
+      fetchOddsApiGames("baseball_kbo", "KBO"),
+      fetchOddsApiGames("baseball_npb", "NPB"),
     ]).then(function (res) {
-      var games = res[0].concat(res[1]).concat(res[2]);
+      var games = res[0].concat(res[1]).concat(res[2]).concat(res[3]).concat(res[4]);
       return collectLineDirection(games);
     }).then(function (res) {
       renderPanel(res);
