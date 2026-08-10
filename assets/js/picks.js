@@ -1857,6 +1857,75 @@
     LOTTE: -0.5,  // 釜山沙職球場,0.729(聯盟最低)
   };
 
+  // ---------- NPB ballpark run environment (static table) ----------
+  // Same rationale as KBO_PARK_ADJ above, sourced from baseball-datapark.skr.jp's
+  // 2024 season HR park-factor table (verified against the live page, not
+  // estimated): unlike KBO this covers all 12 parks with real per-park
+  // numbers rather than just the extremes, so every team gets a small
+  // adjustment scaled off (factor − 1) × 1.5 runs (capped ±1.0) instead of
+  // only flagging the outliers — 神宮(Yakult)/エスコンF(Nippon-Ham) sit far
+  // above the rest of the league, 甲子園(Hanshin)/バンテリン(Chunichi)/
+  // 楽天モバイル(Rakuten) are the clear pitcher-friendly end.
+  var NPB_PARK_ADJ = {
+    "養樂多燕子": 1.0,       // 神宮,1.645
+    "北海道日本火腿鬥士": 0.9, // エスコンフィールド,1.594
+    "福岡軟銀鷹": 0.4,       // PayPayドーム,1.253
+    "讀賣巨人": 0.4,         // 東京ドーム,1.236
+    "千葉羅德海洋": 0.1,     // ZOZOマリン,1.078
+    "歐力士野牛": -0.1,      // 京セラドーム大阪,0.917
+    "橫濱 DeNA 灣星": -0.2,  // 横浜スタジアム,0.877
+    "廣島東洋鯉魚": -0.3,    // MAZDA Zoom-Zoom スタジアム,0.805
+    "埼玉西武獅": -0.4,      // ベルーナドーム,0.764
+    "中日龍": -0.5,          // バンテリンドーム,0.693
+    "東北樂天金鷲": -0.5,    // 楽天モバイルパーク宮城,0.677
+    "阪神虎": -0.5,          // 甲子園,0.682
+  };
+
+  // ---------- KBO/NPB weather: Open-Meteo (public, CORS-enabled, no key or
+  // proxy needed — unlike every other KBO/NPB source above) ----------
+  // Only heat is modeled, the same threshold MLB's own weatherTotalRunAdj()
+  // uses (≥95°F). MLB's wind-direction nudge isn't reproduced here: it needs
+  // each park's home-plate-to-center-field bearing to tell "blowing out"
+  // from "blowing in", and no free source for that was found for KBO/NPB
+  // parks — guessing a direction would be worse than leaving it out.
+  var KBO_PARK_COORDS = {
+    SAMSUNG: [35.841, 128.682], SSG: [37.436, 126.694], NC: [35.223, 128.583],
+    KT: [37.300, 127.010], HANWHA: [36.318, 127.430], KIA: [35.168, 126.889],
+    KIWOOM: [37.498, 126.867], LG: [37.512, 127.072], DOOSAN: [37.512, 127.072],
+    LOTTE: [35.194, 129.062],
+  };
+  var NPB_PARK_COORDS = {
+    "讀賣巨人": [35.706, 139.752], "養樂多燕子": [35.675, 139.716], "橫濱 DeNA 灣星": [35.444, 139.638],
+    "中日龍": [35.145, 136.946], "阪神虎": [34.722, 135.362], "廣島東洋鯉魚": [34.392, 132.486],
+    "福岡軟銀鷹": [33.595, 130.362], "歐力士野牛": [34.667, 135.476], "北海道日本火腿鬥士": [42.975, 141.689],
+    "東北樂天金鷲": [38.262, 140.891], "埼玉西武獅": [35.760, 139.534], "千葉羅德海洋": [35.605, 140.036],
+  };
+  function fetchTodayMaxTemp(lat, lon, tz) {
+    return fetchJson("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon +
+        "&daily=temperature_2m_max&temperature_unit=fahrenheit&timezone=" + encodeURIComponent(tz))
+      .then(function (d) {
+        var t = d.daily && d.daily.temperature_2m_max && d.daily.temperature_2m_max[0];
+        return isFinite(t) ? t : null;
+      })
+      .catch(function () { return null; });
+  }
+  function fetchParkWeather(coordsMap, tz) {
+    var codes = Object.keys(coordsMap);
+    return Promise.all(codes.map(function (code) {
+      return fetchTodayMaxTemp(coordsMap[code][0], coordsMap[code][1], tz);
+    })).then(function (temps) {
+      var map = {};
+      codes.forEach(function (code, i) { map[code] = temps[i]; });
+      return map;
+    });
+  }
+  function weatherHeatAdj(tempF) {
+    if (tempF === null || tempF === undefined || !isFinite(tempF)) return 0;
+    if (tempF >= 95) return 0.3;
+    if (tempF >= 90) return 0.15;
+    return 0;
+  }
+
   function collectOddsApiLeague(sportKey, leagueLabel, cacheKey, statsLookup, sd) {
     sd = sd || TOTAL_SD;
     return fetchOddsApiFull(sportKey, cacheKey).then(function (events) {
@@ -1930,7 +1999,7 @@
           if (totRows.length >= 2) {
             var totLineNum = Number(totLine);
             var expTot = modelH !== null ? statsExpectedTotal(stat.away, stat.home, 4, 20) : null;
-            if (expTot !== null && stat.parkAdj) expTot = clampNum(expTot + stat.parkAdj, 4, 20);
+            if (expTot !== null) expTot = clampNum(expTot + (stat.parkAdj || 0) + (stat.weatherAdj || 0), 4, 20);
             var overProbModel = expTot !== null ? 1 - normCdf((totLineNum - expTot) / sd) : null;
             var fairOvers = [];
             if (overProbModel === null) totRows.forEach(function (r) { var f = fairPair(r.under, r.over); if (f) fairOvers.push(f.b); });
@@ -1958,7 +2027,8 @@
                         ? "今日先發防禦率:客 " + (stat.away.starterEra ? stat.away.starterEra.toFixed(2) : "未公布") +
                           " / 主 " + (stat.home.starterEra ? stat.home.starterEra.toFixed(2) : "未公布") + "。"
                         : "") +
-                      (stat.parkAdj ? "主場球場修正 " + (stat.parkAdj >= 0 ? "+" : "") + stat.parkAdj + " 分(靜態表估計)。" : ""),
+                      (stat.parkAdj ? "主場球場修正 " + (stat.parkAdj >= 0 ? "+" : "") + stat.parkAdj + " 分(靜態表估計)。" : "") +
+                      (stat.weatherAdj ? "今日主場高溫預報修正 " + (stat.weatherAdj >= 0 ? "+" : "") + stat.weatherAdj + " 分(Open-Meteo)。" : ""),
                     "自建模型預期總分 <b>" + expTot.toFixed(1) + "</b> 分 vs 盤口總分線 <b>" + totLineNum + "</b>,估計大分機率 " +
                       pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + ",取優勢較高一邊,以場上最佳賠付 <b>" + esc(String(bestT.price)) +
                       "</b>(" + esc(bestT.book) + ") 計損益兩平 " + pctStr(mktT) + ",優勢 <b>" + ((probT - mktT) >= 0 ? "+" : "") +
@@ -2034,28 +2104,36 @@
     }).catch(function () { return []; });
   }
   function collectKbo() {
-    return Promise.all([fetchKboStats(), fetchKboTodayStarterEra()]).then(function (res) {
-      var stats = res[0], starterEra = res[1];
+    return Promise.all([
+      fetchKboStats(), fetchKboTodayStarterEra(), fetchParkWeather(KBO_PARK_COORDS, "Asia/Seoul"),
+    ]).then(function (res) {
+      var stats = res[0], starterEra = res[1], weather = res[2];
       return collectOddsApiLeague("baseball_kbo", "KBO", "kboOddsCache", function (awayName, homeName) {
         var a = matchKboTeam(awayName, stats), h = matchKboTeam(homeName, stats);
         if (!a || !h) return null;
         return {
           away: applyStarterEraNudge(a, starterEra[a.code]),
           home: applyStarterEraNudge(h, starterEra[h.code]),
-          parkAdj: KBO_PARK_ADJ[h.code] || 0, // KBO teams always host at their own park (no neutral-site games)
+          // KBO teams always host at their own park (no neutral-site games)
+          parkAdj: KBO_PARK_ADJ[h.code] || 0,
+          weatherAdj: weatherHeatAdj(weather[h.code]),
         };
       }, 4.4);
     });
   }
   function collectNpb() {
-    return Promise.all([fetchNpbStats(), fetchNpbTodayStarterEra()]).then(function (res) {
-      var stats = res[0], starterEra = res[1];
+    return Promise.all([
+      fetchNpbStats(), fetchNpbTodayStarterEra(), fetchParkWeather(NPB_PARK_COORDS, "Asia/Tokyo"),
+    ]).then(function (res) {
+      var stats = res[0], starterEra = res[1], weather = res[2];
       return collectOddsApiLeague("baseball_npb", "NPB", "npbOddsCache", function (awayName, homeName) {
         var a = matchNpbTeam(awayName, stats), h = matchNpbTeam(homeName, stats);
         if (!a || !h) return null;
         return {
           away: applyStarterEraNudge(a, starterEra[a.name]),
           home: applyStarterEraNudge(h, starterEra[h.name]),
+          parkAdj: NPB_PARK_ADJ[h.name] || 0,
+          weatherAdj: weatherHeatAdj(weather[h.name]),
         };
       }, 3.9);
     });
@@ -2310,7 +2388,7 @@
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
-      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯);KBO 另加主場球場修正(靜態表,依 2024 全壘打 park factor 估計,大邱/仁川偏大分,蠶室/高尺/沙職偏小分),NPB 暫無球場修正。' +
+      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯)、主場球場修正(靜態表,依 2024 全壘打 park factor 估計)、以及當日主場高溫預報修正(Open-Meteo,僅溫度,無球場座向資料故不做風向修正)。' +
       'CPBL 完全沒有公開賠率市場,卡片標示「模型推算」,以雙方戰績/得失分自建模型,信心度為模型機率與中性 50% 的差距,並非對賭盤優勢,不提供半凱利注碼建議。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
