@@ -1760,6 +1760,44 @@
     return found;
   }
 
+  // ---------- KBO today's-starter ERA: mykbostats.com ----------
+  // Team season ERA (above) blends starters and bullpen together; MLB's model
+  // additionally nudges off the specific starter pitching *today* — no KBO
+  // source publishes that as a clean team-keyed feed, but mykbostats.com's
+  // homepage lists every game's probable starters and links a single
+  // "compare" page carrying all of them at once (one page = every team's
+  // starter for the day, no per-pitcher fetch needed), with each row already
+  // labeled by team, so no separate name-matching pass is needed either.
+  function parseMykboCompare(html) {
+    var map = {};
+    (html.match(/<tr class="current">[\s\S]*?<\/tr>/g) || []).forEach(function (row) {
+      var teamM = row.match(/\/teams\/\d+">([^<]+)</);
+      var eraM = row.match(/team-cell">[\s\S]*?<\/td>\s*<td>([\d.]+)<\/td>/);
+      if (!teamM || !eraM) return;
+      var era = Number(eraM[1]);
+      if (isFinite(era) && era > 0) map[teamM[1].trim().toUpperCase()] = era;
+    });
+    return map;
+  }
+  function fetchKboTodayStarterEra() {
+    return fetchViaProxy("https://mykbostats.com/", "ds-game-card")
+      .then(function (homeHtml) {
+        var m = homeHtml.match(/href="(\/stats\/compare\?pids=[^"]*)"/);
+        if (!m) return {};
+        var url = "https://mykbostats.com" + m[1].replace(/&amp;/g, "&");
+        return fetchViaProxy(url, "ERA").then(parseMykboCompare).catch(function () { return {}; });
+      })
+      .catch(function () { return {}; });
+  }
+  // nudges a team's raAvg toward today's actual starter's ERA instead of the
+  // team's season-long blended figure, capped so one outlier start can't
+  // swing the total too far
+  function applyStarterEraNudge(teamStat, starterEra) {
+    if (!teamStat || teamStat.raAvg == null || !isFinite(starterEra) || starterEra <= 0) return teamStat;
+    var adj = clampNum((starterEra - teamStat.raAvg) * 0.4, -1.2, 1.2);
+    return Object.assign({}, teamStat, { raAvg: teamStat.raAvg + adj, starterEra: starterEra });
+  }
+
   function collectOddsApiLeague(sportKey, leagueLabel, cacheKey, statsLookup, sd) {
     sd = sd || TOTAL_SD;
     return fetchOddsApiFull(sportKey, cacheKey).then(function (events) {
@@ -1855,7 +1893,11 @@
                   reasons: overProbModel !== null ? [
                     "客隊場均得 " + stat.away.rsAvg.toFixed(1) + " 分/失 " + stat.away.raAvg.toFixed(1) + " 分;主隊場均得 " +
                       stat.home.rsAvg.toFixed(1) + " 分/失 " + stat.home.raAvg.toFixed(1) + " 分" +
-                      (leagueLabel === "KBO" ? "(失分端無公開資料,以投手防禦率概估)" : "") + "。",
+                      (leagueLabel === "KBO" ? "(失分端無公開資料,以投手防禦率概估)" : "") + "。" +
+                      (stat.away.starterEra || stat.home.starterEra
+                        ? "今日先發防禦率:客 " + (stat.away.starterEra ? stat.away.starterEra.toFixed(2) : "未公布") +
+                          " / 主 " + (stat.home.starterEra ? stat.home.starterEra.toFixed(2) : "未公布") + "。"
+                        : ""),
                     "自建模型預期總分 <b>" + expTot.toFixed(1) + "</b> 分 vs 盤口總分線 <b>" + totLineNum + "</b>,估計大分機率 " +
                       pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + ",取優勢較高一邊,以場上最佳賠付 <b>" + esc(String(bestT.price)) +
                       "</b>(" + esc(bestT.book) + ") 計損益兩平 " + pctStr(mktT) + ",優勢 <b>" + ((probT - mktT) >= 0 ? "+" : "") +
@@ -1931,10 +1973,15 @@
     }).catch(function () { return []; });
   }
   function collectKbo() {
-    return fetchKboStats().then(function (stats) {
+    return Promise.all([fetchKboStats(), fetchKboTodayStarterEra()]).then(function (res) {
+      var stats = res[0], starterEra = res[1];
       return collectOddsApiLeague("baseball_kbo", "KBO", "kboOddsCache", function (awayName, homeName) {
         var a = matchKboTeam(awayName, stats), h = matchKboTeam(homeName, stats);
-        return a && h ? { away: a, home: h } : null;
+        if (!a || !h) return null;
+        return {
+          away: applyStarterEraNudge(a, starterEra[a.code]),
+          home: applyStarterEraNudge(h, starterEra[h.code]),
+        };
       }, 4.4);
     });
   }
@@ -2196,7 +2243,7 @@
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
-      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。' +
+      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO 大小分另外抓當日先發投手防禦率微調失分預期,同 MLB 的先發 ERA 邏輯;NPB 暫無先發投手資料來源。' +
       'CPBL 完全沒有公開賠率市場,卡片標示「模型推算」,以雙方戰績/得失分自建模型,信心度為模型機率與中性 50% 的差距,並非對賭盤優勢,不提供半凱利注碼建議。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
