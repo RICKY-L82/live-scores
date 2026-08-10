@@ -1655,6 +1655,7 @@
         var w = Number(vals[0]), l = Number(vals[1]), rs = Number(vals[4]), ra = Number(vals[5]);
         if (!isFinite(w) || !isFinite(l) || w + l <= 0) return;
         map[nameM[1].trim()] = {
+          name: nameM[1].trim(),
           wins: w, losses: l, winPct: w / (w + l),
           rsAvg: isFinite(rs) ? rs / (w + l) : null,
           raAvg: isFinite(ra) ? ra / (w + l) : null,
@@ -1695,6 +1696,42 @@
       if (NPB_TEAM_KEYWORDS[cn].some(function (kw) { return up.indexOf(kw) !== -1; })) found = map[cn];
     });
     return found;
+  }
+
+  // ---------- NPB today's-starter ERA: baseball-freak.com ----------
+  // npb.jp's own official 予告先発 (probable starters) page has no ERA — only
+  // names + player-page links, and fetching each pitcher's own page (~12 per
+  // day) through the shared CORS proxy was judged too slow/risky for the
+  // proxy quota shared with CPBL/KBO/MLB. baseball-freak.com/starter.html
+  // solves that the same way mykbostats.com does for KBO: one page lists
+  // every game's probable starters *and* their season ERA together, so it's
+  // a single fetch. Team identity comes from the page's own team-icon
+  // filename code (image/icon/{code}.png) rather than parsing the Japanese
+  // team name text, since the code set is small, fixed, and unambiguous.
+  var NPB_FREAK_CODE_TO_KEY = {
+    g: "讀賣巨人", t: "阪神虎", s: "養樂多燕子", c: "廣島東洋鯉魚", d: "中日龍", yb: "橫濱 DeNA 灣星",
+    l: "埼玉西武獅", bs: "歐力士野牛", f: "北海道日本火腿鬥士", m: "千葉羅德海洋", e: "東北樂天金鷲", h: "福岡軟銀鷹",
+  };
+  function parseNpbFreakStarters(html) {
+    var tblM = html.match(/<table class="yokoku">[\s\S]*?<\/table>/);
+    if (!tblM) return {};
+    var map = {};
+    var cellRe = /<td width="42%"[^>]*>[\s\S]*?<\/td>/g;
+    var m;
+    while ((m = cellRe.exec(tblM[0]))) {
+      var codeM = m[0].match(/icon\/([a-z]+)\.png/);
+      var eraM = m[0].match(/防御率([\d.]+)/); // first match = season ERA line (comes before the "対X" matchup-specific line)
+      if (!codeM || !eraM) continue;
+      var key = NPB_FREAK_CODE_TO_KEY[codeM[1]];
+      var era = Number(eraM[1]);
+      if (key && isFinite(era) && era > 0) map[key] = era;
+    }
+    return map;
+  }
+  function fetchNpbTodayStarterEra() {
+    return fetchViaProxy("https://baseball-freak.com/starter.html", "yokoku")
+      .then(parseNpbFreakStarters)
+      .catch(function () { return {}; });
   }
 
   // ---------- KBO stats source: eng.koreabaseball.com (official, but plain
@@ -2011,10 +2048,15 @@
     });
   }
   function collectNpb() {
-    return fetchNpbStats().then(function (stats) {
+    return Promise.all([fetchNpbStats(), fetchNpbTodayStarterEra()]).then(function (res) {
+      var stats = res[0], starterEra = res[1];
       return collectOddsApiLeague("baseball_npb", "NPB", "npbOddsCache", function (awayName, homeName) {
         var a = matchNpbTeam(awayName, stats), h = matchNpbTeam(homeName, stats);
-        return a && h ? { away: a, home: h } : null;
+        if (!a || !h) return null;
+        return {
+          away: applyStarterEraNudge(a, starterEra[a.name]),
+          home: applyStarterEraNudge(h, starterEra[h.name]),
+        };
       }, 3.9);
     });
   }
@@ -2268,7 +2310,7 @@
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
-      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO 大小分另外抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯),並加入主場球場修正(靜態表,依 2024 全壘打 park factor 估計,大邱/仁川偏大分,蠶室/高尺/沙職偏小分);NPB 暫無先發投手與球場資料來源。' +
+      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯);KBO 另加主場球場修正(靜態表,依 2024 全壘打 park factor 估計,大邱/仁川偏大分,蠶室/高尺/沙職偏小分),NPB 暫無球場修正。' +
       'CPBL 完全沒有公開賠率市場,卡片標示「模型推算」,以雙方戰績/得失分自建模型,信心度為模型機率與中性 50% 的差距,並非對賭盤優勢,不提供半凱利注碼建議。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
