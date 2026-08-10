@@ -279,14 +279,41 @@
   // the key is user-supplied via the 🔑 link and kept in localStorage. Odds
   // are cached 3h to stretch the quota; on any failure picks fall back to the
   // assumed -110 line.
-  var DEFAULT_ODDS_API_KEY = "3fc688e03b27b3d41eb04f761c7f58c3"; // site owner's free-tier key
-  function getOddsApiKey() {
-    try { return localStorage.getItem("oddsApiKey") || DEFAULT_ODDS_API_KEY; } catch (e) { return DEFAULT_ODDS_API_KEY; }
+  // two free-tier keys sharing the load; if the first is out of monthly
+  // credits (API 401/429) calls fall back to the second automatically. A
+  // manually-set localStorage key opts out of the fallback list entirely —
+  // that's the user's own key, not ours to substitute.
+  var DEFAULT_ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd"];
+  function getOddsApiKeys() {
+    try {
+      var override = localStorage.getItem("oddsApiKey");
+      return override ? [override] : DEFAULT_ODDS_API_KEYS;
+    } catch (e) { return DEFAULT_ODDS_API_KEYS; }
+  }
+  function getOddsApiKey() { return getOddsApiKeys()[0]; } // for UI: "is a key configured", and the 🔑 prompt's current value
+  // once a key is found to be exhausted this page load, skip straight past
+  // it on later calls instead of re-attempting and waiting on a fresh 401/429
+  // every time (resets on next page load, which is fine — quotas are monthly)
+  var oddsApiDeadKeys = {};
+  function fetchOddsApiWithFallback(urlForKey) {
+    var keys = getOddsApiKeys().filter(function (k) { return !oddsApiDeadKeys[k]; });
+    if (!keys.length) keys = getOddsApiKeys();
+    function tryKey(i) {
+      if (i >= keys.length) return Promise.reject(new Error("all Odds API keys exhausted"));
+      return fetchJson(urlForKey(keys[i])).catch(function (err) {
+        var quotaLike = /API (401|429)/.test(String(err && err.message || ""));
+        if (quotaLike) {
+          oddsApiDeadKeys[keys[i]] = true;
+          if (i + 1 < keys.length) return tryKey(i + 1);
+        }
+        throw err;
+      });
+    }
+    return tryKey(0);
   }
 
   function fetchNrfiOddsMap(games) {
-    var key = getOddsApiKey();
-    if (!key) return Promise.resolve({});
+    if (!getOddsApiKeys().length) return Promise.resolve({});
     var cache = null;
     try { cache = JSON.parse(localStorage.getItem("nrfiOddsCache")); } catch (e) {}
     if (cache && cache.t && Date.now() - cache.t < 3 * 3600 * 1000 && cache.map) {
@@ -294,15 +321,19 @@
     }
     var want = {};
     games.forEach(function (g) { want[g.teams.away.team.name + "|" + g.teams.home.team.name] = true; });
-    return fetchJson("https://api.the-odds-api.com/v4/sports/baseball_mlb/events?apiKey=" + encodeURIComponent(key))
+    return fetchOddsApiWithFallback(function (key) {
+      return "https://api.the-odds-api.com/v4/sports/baseball_mlb/events?apiKey=" + encodeURIComponent(key);
+    })
       .then(function (events) {
         var targets = (events || []).filter(function (ev) {
           return want[ev.away_team + "|" + ev.home_team];
         }).slice(0, 20);
         return Promise.all(targets.map(function (ev) {
-          return fetchJson("https://api.the-odds-api.com/v4/sports/baseball_mlb/events/" + ev.id +
+          return fetchOddsApiWithFallback(function (key) {
+            return "https://api.the-odds-api.com/v4/sports/baseball_mlb/events/" + ev.id +
               "/odds?apiKey=" + encodeURIComponent(key) +
-              "&regions=us&markets=totals_1st_1_innings&oddsFormat=american")
+              "&regions=us&markets=totals_1st_1_innings&oddsFormat=american";
+          })
             .catch(function () { return null; });
         })).then(function (arr) {
           var map = {};
@@ -1606,15 +1637,16 @@
   }
 
   function fetchOddsApiFull(sportKey, cacheKey) {
-    var key = getOddsApiKey();
-    if (!key) return Promise.resolve([]);
+    if (!getOddsApiKeys().length) return Promise.resolve([]);
     var cache = null;
     try { cache = JSON.parse(localStorage.getItem(cacheKey)); } catch (e) {}
     if (cache && cache.t && Date.now() - cache.t < 3 * 3600 * 1000 && cache.data) {
       return Promise.resolve(cache.data);
     }
-    return fetchJson("https://api.the-odds-api.com/v4/sports/" + sportKey +
-        "/odds?apiKey=" + encodeURIComponent(key) + "&regions=us&markets=h2h,spreads,totals&oddsFormat=american")
+    return fetchOddsApiWithFallback(function (key) {
+      return "https://api.the-odds-api.com/v4/sports/" + sportKey +
+        "/odds?apiKey=" + encodeURIComponent(key) + "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
+    })
       .then(function (data) {
         try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), data: data })); } catch (e) {}
         return data;

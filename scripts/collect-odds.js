@@ -44,9 +44,26 @@ const MAX_SNAPS = 300;        // hard cap per event
 // often this script itself runs, and only the h2h market is requested (the
 // cheapest one — 1 credit/call vs 3 for h2h+spreads+totals) since a 讓分/
 // 大小分走勢 signal isn't worth risking the shared quota for.
-const ODDS_API_KEY = "3fc688e03b27b3d41eb04f761c7f58c3"; // same key assets/js/picks.js defaults to; already public in client JS
+// same two keys assets/js/picks.js falls back between; already public in client JS
+const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd"];
 const ODDS_API_LEAGUES = { kbo: "baseball_kbo", npb: "baseball_npb" };
 const ODDS_API_MIN_INTERVAL_MS = 4 * 3600000; // 4h → ~360 credits/month for these two leagues combined
+
+// tries each key in turn, only moving to the next on a quota/auth failure
+// (401/429) — a different kind of error (network blip, 5xx) shouldn't burn
+// through the fallback key too
+async function fetchOddsApiWithFallback(urlForKey) {
+  let lastErr;
+  for (const key of ODDS_API_KEYS) {
+    try {
+      return await fetchJson(urlForKey(key));
+    } catch (e) {
+      lastErr = e;
+      if (!/HTTP (401|429)/.test(String((e && e.message) || ""))) throw e;
+    }
+  }
+  throw lastErr;
+}
 
 function espnDate(offsetDays) {
   // ESPN scoreboard dates follow US Eastern time
@@ -210,9 +227,9 @@ async function collectOddsApiLeague(league, sportKey) {
 
   let data;
   try {
-    data = await fetchJson(
+    data = await fetchOddsApiWithFallback((key) =>
       "https://api.the-odds-api.com/v4/sports/" + sportKey +
-      "/odds?apiKey=" + ODDS_API_KEY + "&regions=us&markets=h2h&oddsFormat=american"
+      "/odds?apiKey=" + key + "&regions=us&markets=h2h&oddsFormat=american"
     );
   } catch (e) {
     console.error("[" + league + "] fetch failed: " + e.message);

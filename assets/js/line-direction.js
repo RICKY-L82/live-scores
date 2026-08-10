@@ -89,16 +89,38 @@
   }
   // KBO/NPB have no ESPN feed; their schedule comes from The Odds API's
   // events-only endpoint (no markets param = free, doesn't touch the shared
-  // quota) — mirrors assets/js/picks.js's key handling so a custom key set
-  // there is honored here too
-  var DEFAULT_ODDS_API_KEY = "3fc688e03b27b3d41eb04f761c7f58c3";
-  function getOddsApiKey() {
-    try { return localStorage.getItem("oddsApiKey") || DEFAULT_ODDS_API_KEY; } catch (e) { return DEFAULT_ODDS_API_KEY; }
+  // quota) — mirrors assets/js/picks.js's key handling (two keys with
+  // fallback, unless the user set their own via the picks.html 🔑 link) so a
+  // key set there is honored here too.
+  var DEFAULT_ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd"];
+  function getOddsApiKeys() {
+    try {
+      var override = localStorage.getItem("oddsApiKey");
+      return override ? [override] : DEFAULT_ODDS_API_KEYS;
+    } catch (e) { return DEFAULT_ODDS_API_KEYS; }
+  }
+  var oddsApiDeadKeys = {};
+  function fetchOddsApiWithFallback(urlForKey) {
+    var keys = getOddsApiKeys().filter(function (k) { return !oddsApiDeadKeys[k]; });
+    if (!keys.length) keys = getOddsApiKeys();
+    function tryKey(i) {
+      if (i >= keys.length) return Promise.reject(new Error("all Odds API keys exhausted"));
+      return fetchJson(urlForKey(keys[i])).catch(function (err) {
+        var quotaLike = /API (401|429)/.test(String(err && err.message || ""));
+        if (quotaLike) {
+          oddsApiDeadKeys[keys[i]] = true;
+          if (i + 1 < keys.length) return tryKey(i + 1);
+        }
+        throw err;
+      });
+    }
+    return tryKey(0);
   }
   function fetchOddsApiGames(sportKey, leagueLabel) {
-    var key = getOddsApiKey();
-    if (!key) return Promise.resolve([]);
-    return fetchJson("https://api.the-odds-api.com/v4/sports/" + sportKey + "/events?apiKey=" + encodeURIComponent(key))
+    if (!getOddsApiKeys().length) return Promise.resolve([]);
+    return fetchOddsApiWithFallback(function (key) {
+      return "https://api.the-odds-api.com/v4/sports/" + sportKey + "/events?apiKey=" + encodeURIComponent(key);
+    })
       .then(function (events) {
         var now = Date.now();
         return (events || []).filter(function (ev) {
