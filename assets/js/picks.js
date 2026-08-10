@@ -1552,12 +1552,372 @@
     }).catch(function () { return []; });
   }
 
+  // ---------- KBO / NPB (The Odds API line-shopping model) ----------
+  // Neither ESPN nor MLB Stats API covers Korean/Japanese baseball, so there's
+  // no free standings/scoring feed to build an independent win-probability
+  // model the way collectMlb()/collectWnba() do. The Odds API does list both
+  // leagues (baseball_kbo, baseball_npb) with real h2h/spreads/totals books,
+  // so instead of model-vs-market this uses a market-vs-market "line
+  // shopping" edge: the vig-free probability averaged across every book
+  // quoting a market is treated as the "true" price, and the single best
+  // price available anywhere is checked against it. A book paying out worse
+  // than the multi-book consensus is normal (that's the vig); one paying out
+  // *better* than consensus is where the edge comes from. Needs >=2 books
+  // quoting the same market/line or the "edge" would just be reading back
+  // that one book's own vig, so those are skipped.
+  function americanToDecimal(price) {
+    var o = Number(String(price || "").replace(/^\+/, ""));
+    if (!isFinite(o) || o === 0) return null;
+    return o > 0 ? 1 + o / 100 : 1 + 100 / (-o);
+  }
+  function bestAmerican(list) {
+    var best = null, bestDec = -Infinity;
+    (list || []).forEach(function (x) {
+      var d = americanToDecimal(x.price);
+      if (d !== null && d > bestDec) { bestDec = d; best = x; }
+    });
+    return best;
+  }
+  function fairPair(priceA, priceB) {
+    var a = impliedProb(priceA), b = impliedProb(priceB);
+    if (a === null || b === null || a + b === 0) return null;
+    return { a: a / (a + b), b: b / (a + b) };
+  }
+  function avgArr(arr) { return arr.reduce(function (x, y) { return x + y; }, 0) / arr.length; }
+  function mostCommonKey(map) {
+    var bestK = null, bestN = 0;
+    Object.keys(map).forEach(function (k) { if (map[k].length > bestN) { bestN = map[k].length; bestK = k; } });
+    return bestK;
+  }
+
+  function fetchOddsApiFull(sportKey, cacheKey) {
+    var key = getOddsApiKey();
+    if (!key) return Promise.resolve([]);
+    var cache = null;
+    try { cache = JSON.parse(localStorage.getItem(cacheKey)); } catch (e) {}
+    if (cache && cache.t && Date.now() - cache.t < 3 * 3600 * 1000 && cache.data) {
+      return Promise.resolve(cache.data);
+    }
+    return fetchJson("https://api.the-odds-api.com/v4/sports/" + sportKey +
+        "/odds?apiKey=" + encodeURIComponent(key) + "&regions=us&markets=h2h,spreads,totals&oddsFormat=american")
+      .then(function (data) {
+        try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), data: data })); } catch (e) {}
+        return data;
+      })
+      .catch(function () { return []; });
+  }
+
+  function collectOddsApiLeague(sportKey, leagueLabel, cacheKey) {
+    return fetchOddsApiFull(sportKey, cacheKey).then(function (events) {
+      var now = Date.now();
+      var candidates = [];
+      (events || []).forEach(function (ev) {
+        if (!ev.commence_time || new Date(ev.commence_time).getTime() <= now) return;
+        var books = ev.bookmakers || [];
+        if (books.length < 2) return;
+        var base = { league: leagueLabel, away: ev.away_team, home: ev.home_team, start: ev.commence_time };
+
+        // -- 獨贏 (h2h) --
+        var homeFair = [], homePrices = [], awayPrices = [];
+        books.forEach(function (bk) {
+          var mk = (bk.markets || []).find(function (m) { return m.key === "h2h"; });
+          if (!mk) return;
+          var ho = mk.outcomes.find(function (o) { return o.name === ev.home_team; });
+          var ao = mk.outcomes.find(function (o) { return o.name === ev.away_team; });
+          if (!ho || !ao) return;
+          var f = fairPair(ao.price, ho.price);
+          if (f) homeFair.push(f.b);
+          homePrices.push({ price: ho.price, book: bk.title });
+          awayPrices.push({ price: ao.price, book: bk.title });
+        });
+        if (homeFair.length >= 2) {
+          var consensusHome = avgArr(homeFair);
+          var bestHome = bestAmerican(homePrices), bestAway = bestAmerican(awayPrices);
+          if (bestHome && bestAway) {
+            var beHome = impliedProb(bestHome.price), beAway = impliedProb(bestAway.price);
+            var edgeHome = consensusHome - beHome, edgeAway = (1 - consensusHome) - beAway;
+            var pickHome = edgeHome >= edgeAway;
+            var prob = pickHome ? consensusHome : 1 - consensusHome;
+            var mkt = pickHome ? beHome : beAway;
+            var best = pickHome ? bestHome : bestAway;
+            candidates.push(Object.assign({}, base, {
+              type: "ml",
+              pick: pickHome ? ev.home_team + " 主勝" : ev.away_team + " 客勝",
+              price: String(best.price),
+              prob: prob, market: mkt, edge: prob - mkt,
+              reasons: [
+                "全市場(" + homeFair.length + " 家書商)去水位平均勝率:主 " + pctStr(consensusHome) + " / 客 " + pctStr(1 - consensusHome) + "。",
+                "取優勢較高的一邊,以場上最佳賠付 <b>" + esc(String(best.price)) + "</b>(" + esc(best.book) + ") 計損益兩平 " +
+                  pctStr(mkt) + ",優勢 <b>" + ((prob - mkt) >= 0 ? "+" : "") + ((prob - mkt) * 100).toFixed(1) + "%</b>。",
+              ],
+            }));
+          }
+        }
+
+        // -- 大小分 (totals) --
+        var totByPoint = {};
+        books.forEach(function (bk) {
+          var mk = (bk.markets || []).find(function (m) { return m.key === "totals"; });
+          if (!mk) return;
+          var ov = mk.outcomes.find(function (o) { return o.name === "Over"; });
+          var un = mk.outcomes.find(function (o) { return o.name === "Under"; });
+          if (!ov || !un || ov.point === undefined) return;
+          var pt = String(ov.point);
+          (totByPoint[pt] = totByPoint[pt] || []).push({ book: bk.title, over: ov.price, under: un.price });
+        });
+        var totLine = mostCommonKey(totByPoint);
+        if (totLine !== null) {
+          var totRows = totByPoint[totLine];
+          if (totRows.length >= 2) {
+            var fairOvers = [];
+            totRows.forEach(function (r) { var f = fairPair(r.under, r.over); if (f) fairOvers.push(f.b); });
+            if (fairOvers.length >= 2) {
+              var consensusOver = avgArr(fairOvers);
+              var bestOver = bestAmerican(totRows.map(function (r) { return { price: r.over, book: r.book }; }));
+              var bestUnder = bestAmerican(totRows.map(function (r) { return { price: r.under, book: r.book }; }));
+              if (bestOver && bestUnder) {
+                var beOver = impliedProb(bestOver.price), beUnder = impliedProb(bestUnder.price);
+                var edgeOver = consensusOver - beOver, edgeUnder = (1 - consensusOver) - beUnder;
+                var pickOver = edgeOver >= edgeUnder;
+                var probT = pickOver ? consensusOver : 1 - consensusOver;
+                var mktT = pickOver ? beOver : beUnder;
+                var bestT = pickOver ? bestOver : bestUnder;
+                var totLineNum = Number(totLine);
+                candidates.push(Object.assign({}, base, {
+                  type: pickOver ? "over" : "under",
+                  pick: (pickOver ? "大分 Over " : "小分 Under ") + totLineNum,
+                  price: String(bestT.price),
+                  prob: probT, market: mktT, edge: probT - mktT,
+                  reasons: [
+                    "總分線 " + totLineNum + "(" + totRows.length + " 家書商同線)去水位平均:大分 " + pctStr(consensusOver) +
+                      " / 小分 " + pctStr(1 - consensusOver) + "。",
+                    "取優勢較高的一邊,以場上最佳賠付 <b>" + esc(String(bestT.price)) + "</b>(" + esc(bestT.book) + ") 計損益兩平 " +
+                      pctStr(mktT) + ",優勢 <b>" + ((probT - mktT) >= 0 ? "+" : "") + ((probT - mktT) * 100).toFixed(1) + "%</b>。",
+                  ],
+                }));
+              }
+            }
+          }
+        }
+
+        // -- 讓分 (spreads) --
+        var spByPoint = {};
+        books.forEach(function (bk) {
+          var mk = (bk.markets || []).find(function (m) { return m.key === "spreads"; });
+          if (!mk) return;
+          var ho = mk.outcomes.find(function (o) { return o.name === ev.home_team; });
+          var ao = mk.outcomes.find(function (o) { return o.name === ev.away_team; });
+          if (!ho || !ao || ho.point === undefined) return;
+          var pt = String(ho.point);
+          (spByPoint[pt] = spByPoint[pt] || []).push({ book: bk.title, homePrice: ho.price, awayPrice: ao.price, awayPoint: ao.point });
+        });
+        var spLine = mostCommonKey(spByPoint);
+        if (spLine !== null) {
+          var spRows = spByPoint[spLine];
+          if (spRows.length >= 2) {
+            var fairHomeCover = [];
+            spRows.forEach(function (r) { var f = fairPair(r.awayPrice, r.homePrice); if (f) fairHomeCover.push(f.b); });
+            if (fairHomeCover.length >= 2) {
+              var consensusHomeCover = avgArr(fairHomeCover);
+              var bestHomeSp = bestAmerican(spRows.map(function (r) { return { price: r.homePrice, book: r.book }; }));
+              var bestAwaySp = bestAmerican(spRows.map(function (r) { return { price: r.awayPrice, book: r.book }; }));
+              if (bestHomeSp && bestAwaySp) {
+                var beHomeSp = impliedProb(bestHomeSp.price), beAwaySp = impliedProb(bestAwaySp.price);
+                var edgeHomeSp = consensusHomeCover - beHomeSp, edgeAwaySp = (1 - consensusHomeCover) - beAwaySp;
+                var pickHomeSp = edgeHomeSp >= edgeAwaySp;
+                var probSp = pickHomeSp ? consensusHomeCover : 1 - consensusHomeCover;
+                var mktSp = pickHomeSp ? beHomeSp : beAwaySp;
+                var bestSp = pickHomeSp ? bestHomeSp : bestAwaySp;
+                var spLineNum = Number(spLine);
+                var awayLineNum = spRows[0].awayPoint !== undefined ? Number(spRows[0].awayPoint) : -spLineNum;
+                candidates.push(Object.assign({}, base, {
+                  type: "spread",
+                  pick: pickHomeSp
+                    ? ev.home_team + " " + (spLineNum >= 0 ? "+" : "") + spLineNum
+                    : ev.away_team + " " + (awayLineNum >= 0 ? "+" : "") + awayLineNum,
+                  price: String(bestSp.price),
+                  prob: probSp, market: mktSp, edge: probSp - mktSp,
+                  reasons: [
+                    "讓分線 主" + (spLineNum >= 0 ? "+" : "") + spLineNum + "(" + spRows.length + " 家書商同線)去水位平均覆蓋率:主 " +
+                      pctStr(consensusHomeCover) + " / 客 " + pctStr(1 - consensusHomeCover) + "。",
+                    "取優勢較高的一邊,以場上最佳賠付 <b>" + esc(String(bestSp.price)) + "</b>(" + esc(bestSp.book) + ") 計損益兩平 " +
+                      pctStr(mktSp) + ",優勢 <b>" + ((probSp - mktSp) >= 0 ? "+" : "") + ((probSp - mktSp) * 100).toFixed(1) + "%</b>。",
+                  ],
+                }));
+              }
+            }
+          }
+        }
+      });
+      return candidates;
+    }).catch(function () { return []; });
+  }
+  function collectKbo() { return collectOddsApiLeague("baseball_kbo", "KBO", "kboOddsCache"); }
+  function collectNpb() { return collectOddsApiLeague("baseball_npb", "NPB", "npbOddsCache"); }
+
+  // ---------- CPBL (own record/scoring model — no odds market anywhere) ----------
+  // Neither The Odds API nor ESPN lists CPBL. atplayertw.com.tw renders CPBL's
+  // schedule and standings as plain server-side HTML (no CORS header, hence
+  // the same proxy list used for playsport above) — schedule comes from a
+  // schema.org SportsEvent JSON-LD block, standings from its "戰績排名" table
+  // (W/L/PCT/得/失). With no bookmaker to compare against, candidates carry
+  // noMarket:true and use a neutral 50% baseline for "edge" purely to rank
+  // among themselves; 大小分/讓分 fall back to a league-average total and the
+  // MLB-standard ±1.5 run-line convention as reference points instead of a
+  // real posted line. These are model predictions, not value bets — the UI
+  // must not present them as having a real market edge.
+  var CPBL_TOTAL_SD = 4.6; // approx combined-runs stdev; no per-game log available to derive it live
+  function fetchCpblHtml(idx) {
+    if (idx >= PS_PROXIES.length) return Promise.reject(new Error("all proxies failed"));
+    return fetchText(PS_PROXIES[idx]("https://atplayertw.com.tw/cpbl/"))
+      .then(function (html) {
+        if (html.indexOf("atp-standings") === -1) throw new Error("no standings");
+        return html;
+      })
+      .catch(function () { return fetchCpblHtml(idx + 1); });
+  }
+  function parseCpblSchedule(html) {
+    var games = [];
+    var re = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
+    var m;
+    while ((m = re.exec(html))) {
+      var data;
+      try { data = JSON.parse(m[1]); } catch (e) { continue; }
+      var graph = data["@graph"] || [data];
+      graph.forEach(function (node) {
+        if (!node || node["@type"] !== "ItemList") return;
+        (node.itemListElement || []).forEach(function (li) {
+          var it = li && li.item;
+          if (!it || it["@type"] !== "SportsEvent") return;
+          if (it.eventStatus !== "https://schema.org/EventScheduled") return;
+          if (!it.awayTeam || !it.homeTeam || !it.startDate) return;
+          games.push({ away: it.awayTeam.name, home: it.homeTeam.name, start: it.startDate });
+        });
+      });
+    }
+    return games;
+  }
+  function parseCpblStandings(html) {
+    var idx = html.indexOf("戰績排名");
+    var section = idx === -1 ? html : html.slice(idx);
+    var tableMatch = section.match(/<table class="atp-table">[\s\S]*?<\/table>/);
+    if (!tableMatch) return {};
+    var rows = tableMatch[0].match(/<tr>[\s\S]*?<\/tr>/g) || [];
+    var map = {};
+    rows.forEach(function (row) {
+      var nameM = row.match(/atp-standings__team-text">([^<]+)</);
+      if (!nameM) return; // header row has no team-text
+      var cells = row.match(/<td class="is-center">([^<]*)<\/td>/g) || [];
+      var vals = cells.map(function (c) { return c.replace(/<[^>]+>/g, "").trim(); });
+      if (vals.length < 7) return; // W, L, PCT, GB, 得, 失, 分差
+      var w = Number(vals[0]), l = Number(vals[1]), rs = Number(vals[4]), ra = Number(vals[5]);
+      if (!isFinite(w) || !isFinite(l) || w + l <= 0) return;
+      map[nameM[1].trim()] = {
+        wins: w, losses: l, winPct: w / (w + l),
+        rsAvg: isFinite(rs) ? rs / (w + l) : null,
+        raAvg: isFinite(ra) ? ra / (w + l) : null,
+      };
+    });
+    return map;
+  }
+  function cpblModelHome(aRec, hRec) {
+    if (!aRec || !hRec || aRec.winPct + hRec.winPct === 0) return null;
+    return clampNum(hRec.winPct / (aRec.winPct + hRec.winPct) + 0.03, 0.05, 0.95); // small home-field nudge
+  }
+  function cpblExpectedTotal(aRec, hRec) {
+    if (!aRec || !hRec || aRec.rsAvg === null || hRec.rsAvg === null || aRec.raAvg === null || hRec.raAvg === null) return null;
+    return clampNum((aRec.rsAvg + hRec.raAvg) / 2 + (hRec.rsAvg + aRec.raAvg) / 2, 4, 20);
+  }
+  function cpblLeagueAvgTotal(standings) {
+    var vals = [];
+    Object.keys(standings).forEach(function (k) {
+      var r = standings[k];
+      if (r.rsAvg !== null && r.raAvg !== null) vals.push(r.rsAvg + r.raAvg);
+    });
+    return vals.length ? avgArr(vals) : null;
+  }
+  function collectCpbl() {
+    return fetchCpblHtml(0).then(function (html) {
+      var games = parseCpblSchedule(html);
+      var standings = parseCpblStandings(html);
+      var leagueAvgTotal = cpblLeagueAvgTotal(standings);
+      var now = Date.now();
+      var candidates = [];
+      games.forEach(function (g) {
+        if (!g.start || new Date(g.start).getTime() <= now) return;
+        var aRec = standings[g.away], hRec = standings[g.home];
+        if (!aRec || !hRec) return;
+        var base = { league: "CPBL", away: g.away, home: g.home, start: g.start };
+        var modelH = cpblModelHome(aRec, hRec);
+
+        // -- 獨贏 --
+        if (modelH !== null) {
+          var pickHome = modelH >= 0.5;
+          var prob = pickHome ? modelH : 1 - modelH;
+          candidates.push(Object.assign({}, base, {
+            type: "ml", noMarket: true,
+            pick: pickHome ? g.home + " 主勝" : g.away + " 客勝",
+            price: "—",
+            prob: prob, market: 0.5, edge: prob - 0.5,
+            reasons: [
+              "戰績:客 " + aRec.wins + "-" + aRec.losses + "(勝率 " + pctStr(aRec.winPct) + ") vs 主 " +
+                hRec.wins + "-" + hRec.losses + "(勝率 " + pctStr(hRec.winPct) + ")。",
+              "CPBL 無公開賠率市場,以雙方勝率(主場略加成)推算模型勝率 <b>" + pctStr(prob) + "</b>,為模型預測,非對賭盤優勢。",
+            ],
+          }));
+        }
+
+        // -- 大小分 --
+        var expTot = cpblExpectedTotal(aRec, hRec);
+        if (expTot !== null && leagueAvgTotal !== null) {
+          var totLine = Math.round(leagueAvgTotal * 2) / 2;
+          var pOver = 1 - normCdf((totLine - expTot) / CPBL_TOTAL_SD);
+          var pickOver = pOver >= 0.5;
+          var probT = pickOver ? pOver : 1 - pOver;
+          candidates.push(Object.assign({}, base, {
+            type: pickOver ? "over" : "under", noMarket: true,
+            pick: (pickOver ? "大分 Over " : "小分 Under ") + totLine,
+            price: "—",
+            prob: probT, market: 0.5, edge: probT - 0.5,
+            reasons: [
+              "客隊場均得 " + aRec.rsAvg.toFixed(1) + " 分/失 " + aRec.raAvg.toFixed(1) + " 分;主隊場均得 " +
+                hRec.rsAvg.toFixed(1) + " 分/失 " + hRec.raAvg.toFixed(1) + " 分。",
+              "模型預期總分 <b>" + expTot.toFixed(1) + "</b> 分,以聯盟平均總分 <b>" + totLine +
+                "</b> 分為參考基準(CPBL 無公開盤口線),估計大分機率 " + pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + "。",
+            ],
+          }));
+        }
+
+        // -- 讓分 --
+        if (modelH !== null) {
+          var homeLine = modelH >= 0.5 ? -1.5 : 1.5;
+          var pHomeCover = homeCoverProb(modelH, homeLine, CPBL_TOTAL_SD);
+          var pickHomeSp = pHomeCover >= 0.5;
+          var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
+          var spLine = pickHomeSp ? homeLine : -homeLine;
+          candidates.push(Object.assign({}, base, {
+            type: "spread", noMarket: true,
+            pick: (pickHomeSp ? g.home : g.away) + " " + (spLine >= 0 ? "+" : "") + spLine,
+            price: "—",
+            prob: probSp, market: 0.5, edge: probSp - 0.5,
+            reasons: [
+              "模型獨贏勝率 <b>" + pctStr(modelH) + "</b>(主)反推期望分差,以棒球常見的 1.5 分讓分慣例(CPBL 無公開讓分盤口)估計覆蓋機率 <b>" +
+                pctStr(probSp) + "</b>。",
+            ],
+          }));
+        }
+      });
+      return candidates;
+    }).catch(function () { return []; });
+  }
+
   // ---------- render ----------
   var TYPE_LABEL = { ml: "獨贏", nrfi: "首局 NRFI", yrfi: "首局 YRFI", over: "大分", under: "小分", spread: "讓分" };
 
   function pickCardHtml(c, rank) {
-    var kelly = halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
-    var weakTag = c.edge < 0.01 ? '<span class="pick-weak">優勢有限</span>' : "";
+    var kelly = c.noMarket ? null : halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
+    var weakTag = !c.noMarket && c.edge < 0.01 ? '<span class="pick-weak">優勢有限</span>' : "";
+    var noMarketTag = c.noMarket ? '<span class="pick-weak">無公開賠率,模型預測</span>' : "";
     return (
       '<div class="pick-card">' +
         '<div class="pick-rank">' + rank + '</div>' +
@@ -1566,14 +1926,17 @@
             '<span class="pick-type ' + c.type + '">' + TYPE_LABEL[c.type] + '</span>' +
             '<span class="pick-league">' + c.league + '</span>' +
             '<span class="pick-time">台灣時間 ' + esc(formatTime(c.start)) + ' 開賽</span>' +
-            weakTag +
+            weakTag + noMarketTag +
           '</div>' +
           '<div class="pick-match">' + esc(c.away) + ' @ ' + esc(c.home) + '</div>' +
-          '<div class="pick-bet">🎯 <b>' + esc(c.pick) + '</b><span class="pick-price">' + esc(c.price) + '</span></div>' +
+          '<div class="pick-bet">🎯 <b>' + esc(c.pick) + '</b><span class="pick-price">' + (c.noMarket ? "模型推算" : esc(c.price)) + '</span></div>' +
           '<div class="pick-nums">' +
             '<span>模型機率 <b>' + pctStr(c.prob) + '</b></span>' +
-            '<span>市場損益兩平 <b>' + pctStr(c.market) + '</b></span>' +
-            '<span class="' + (c.edge >= 0 ? "pos" : "neg") + '">優勢 <b>' + (c.edge >= 0 ? "+" : "") + (c.edge * 100).toFixed(1) + '%</b></span>' +
+            (c.noMarket
+              ? '<span>中性基準 <b>50.0%</b></span>'
+              : '<span>市場損益兩平 <b>' + pctStr(c.market) + '</b></span>') +
+            '<span class="' + (c.edge >= 0 ? "pos" : "neg") + '">' + (c.noMarket ? "信心度" : "優勢") + ' <b>' +
+              (c.edge >= 0 ? "+" : "") + (c.edge * 100).toFixed(1) + '%</b></span>' +
             (kelly ? '<span>半凱利注碼 <b>' + kelly + '</b></span>' : "") +
           '</div>' +
           '<ul class="pick-reasons">' +
@@ -1625,6 +1988,15 @@
     var spWnba = sp.filter(function (c) { return c.league === "WNBA"; });
     var mlMlb = ml.filter(function (c) { return c.league === "MLB"; });
     var mlNba = ml.filter(function (c) { return c.league === "NBA"; });
+    var ouKbo = ou.filter(function (c) { return c.league === "KBO"; });
+    var spKbo = sp.filter(function (c) { return c.league === "KBO"; });
+    var mlKbo = ml.filter(function (c) { return c.league === "KBO"; });
+    var ouNpb = ou.filter(function (c) { return c.league === "NPB"; });
+    var spNpb = sp.filter(function (c) { return c.league === "NPB"; });
+    var mlNpb = ml.filter(function (c) { return c.league === "NPB"; });
+    var ouCpbl = ou.filter(function (c) { return c.league === "CPBL"; });
+    var spCpbl = sp.filter(function (c) { return c.league === "CPBL"; });
+    var mlCpbl = ml.filter(function (c) { return c.league === "CPBL"; });
 
     if (!fiAll.length && !ml.length && !ou.length && !sp.length) {
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
@@ -1647,20 +2019,37 @@
       sectionHtml("🎯 讓分 Spread", spWnba.slice(0, TOP_N), spWnba.length);
     var nbaSubHtml =
       sectionHtml("🏆 獨贏勝率", mlNba.slice(0, TOP_N), mlNba.length);
+    var kboSubHtml =
+      sectionHtml("🏆 獨贏勝率", mlKbo.slice(0, TOP_N), mlKbo.length) +
+      sectionHtml("📊 大小分 Over/Under", ouKbo.slice(0, TOP_N), ouKbo.length) +
+      sectionHtml("🎯 讓分 Run Line", spKbo.slice(0, TOP_N), spKbo.length);
+    var npbSubHtml =
+      sectionHtml("🏆 獨贏勝率", mlNpb.slice(0, TOP_N), mlNpb.length) +
+      sectionHtml("📊 大小分 Over/Under", ouNpb.slice(0, TOP_N), ouNpb.length) +
+      sectionHtml("🎯 讓分 Run Line", spNpb.slice(0, TOP_N), spNpb.length);
+    var cpblSubHtml =
+      sectionHtml("🏆 獨贏勝率", mlCpbl.slice(0, TOP_N), mlCpbl.length) +
+      sectionHtml("📊 大小分 Over/Under", ouCpbl.slice(0, TOP_N), ouCpbl.length) +
+      sectionHtml("🎯 讓分 Run Line", spCpbl.slice(0, TOP_N), spCpbl.length);
     var mainHtml =
       leagueSectionHtml("⚾", "MLB", fi.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
       leagueSectionHtml("🏀", "WNBA", ouWnba.length + spWnba.length, wnbaSubHtml) +
-      leagueSectionHtml("🏀", "NBA", mlNba.length, nbaSubHtml);
+      leagueSectionHtml("🏀", "NBA", mlNba.length, nbaSubHtml) +
+      leagueSectionHtml("🇰🇷", "KBO 韓國職棒", mlKbo.length + ouKbo.length + spKbo.length, kboSubHtml) +
+      leagueSectionHtml("🇯🇵", "NPB 日本職棒", mlNpb.length + ouNpb.length + spNpb.length, npbSubHtml) +
+      leagueSectionHtml("🇹🇼", "CPBL 中華職棒", mlCpbl.length + ouCpbl.length + spCpbl.length, cpblSubHtml);
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
-      '共掃描 <b>' + candidates.length + '</b> 個候選,先依聯盟(MLB／WNBA／NBA)分組,各聯盟下再分「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」等類別,' +
+      '共掃描 <b>' + candidates.length + '</b> 個候選,先依聯盟(MLB／WNBA／NBA／KBO／NPB／CPBL)分組,各聯盟下再分「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」等類別,' +
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
+      'KBO/NPB 無免費戰績模型,改採跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型,優勢代表該書商相對其他書商的讓利空間。' +
+      'CPBL 完全沒有公開賠率市場,卡片標示「模型推算」,以雙方戰績/得失分自建模型,信心度為模型機率與中性 50% 的差距,並非對賭盤優勢,不提供半凱利注碼建議。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
-      (keySet ? "🔑 NRFI/YRFI 實際賠率已啟用(The Odds API;點此更換金鑰)"
-              : "🔑 設定免費 The Odds API 金鑰,即可用真實 NRFI/YRFI 賠率取代 -110 估算") +
+      (keySet ? "🔑 The Odds API 金鑰已啟用(NRFI/YRFI、KBO、NPB 賠率;點此更換金鑰)"
+              : "🔑 設定免費 The Odds API 金鑰,即可用真實 NRFI/YRFI、KBO、NPB 賠率取代估算") +
       '</a></p></div>' +
       mainHtml;
     var lk = document.getElementById("oddsKeyLink");
@@ -1672,6 +2061,8 @@
         if (k.trim()) localStorage.setItem("oddsApiKey", k.trim());
         else localStorage.removeItem("oddsApiKey");
         localStorage.removeItem("nrfiOddsCache");
+        localStorage.removeItem("kboOddsCache");
+        localStorage.removeItem("npbOddsCache");
       } catch (err) {}
       run();
     });
@@ -1685,8 +2076,11 @@
       collectMlb().catch(function () { return []; }),
       collectNba(),
       collectWnba(),
+      collectKbo(),
+      collectNpb(),
+      collectCpbl(),
     ]).then(function (res) {
-      render(res[0].concat(res[1]).concat(res[2]));
+      render(res[0].concat(res[1]).concat(res[2]).concat(res[3]).concat(res[4]).concat(res[5]));
       document.getElementById("updatedAt").textContent =
         "計算於 " + new Date().toLocaleTimeString("zh-TW", { hour12: false });
     }).catch(function (err) {
