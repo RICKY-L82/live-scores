@@ -1798,6 +1798,28 @@
     return Object.assign({}, teamStat, { raAvg: teamStat.raAvg + adj, starterEra: starterEra });
   }
 
+  // ---------- KBO ballpark run environment (static table) ----------
+  // No live per-park run-factor feed exists for KBO the way MLB Stats API's
+  // venue data does, so this is a fixed table sourced from 2024 season HR
+  // park-factor rankings (a commonly cited proxy for scoring environment
+  // when a direct runs-factor isn't available for every park): Daegu
+  // (Samsung) and Incheon (SSG) are far above the rest of the league,
+  // Jamsil (LG/Doosan, shared) and Gocheok (Kiwoom, dome) and Sajik (Lotte)
+  // are the clear pitcher-friendly end, and the remaining four parks sit
+  // close enough to neutral that no adjustment is applied — matches the
+  // conservative, extremes-only approach MLB's own parkTotalRunAdj() takes
+  // (Coors gets a nudge, the rest of the league doesn't). Daejeon (Hanwha)
+  // opened a brand-new stadium in 2025 with no established run environment
+  // yet, so it's left neutral rather than guessed at.
+  var KBO_PARK_ADJ = {
+    SAMSUNG: 0.8, // 大邱三星獅子公園,2024 HR park factor 1.522(聯盟最高)
+    SSG: 0.7,     // 仁川SSG蘭德斯球場,1.489
+    LG: -0.5,     // 蠶室棒球場(LG/Doosan 共用),0.732,大球場出名壓分
+    DOOSAN: -0.5, // 蠶室棒球場(同上)
+    KIWOOM: -0.4, // 高尺天空巨蛋,室內巨蛋,0.822
+    LOTTE: -0.5,  // 釜山沙職球場,0.729(聯盟最低)
+  };
+
   function collectOddsApiLeague(sportKey, leagueLabel, cacheKey, statsLookup, sd) {
     sd = sd || TOTAL_SD;
     return fetchOddsApiFull(sportKey, cacheKey).then(function (events) {
@@ -1871,6 +1893,7 @@
           if (totRows.length >= 2) {
             var totLineNum = Number(totLine);
             var expTot = modelH !== null ? statsExpectedTotal(stat.away, stat.home, 4, 20) : null;
+            if (expTot !== null && stat.parkAdj) expTot = clampNum(expTot + stat.parkAdj, 4, 20);
             var overProbModel = expTot !== null ? 1 - normCdf((totLineNum - expTot) / sd) : null;
             var fairOvers = [];
             if (overProbModel === null) totRows.forEach(function (r) { var f = fairPair(r.under, r.over); if (f) fairOvers.push(f.b); });
@@ -1897,7 +1920,8 @@
                       (stat.away.starterEra || stat.home.starterEra
                         ? "今日先發防禦率:客 " + (stat.away.starterEra ? stat.away.starterEra.toFixed(2) : "未公布") +
                           " / 主 " + (stat.home.starterEra ? stat.home.starterEra.toFixed(2) : "未公布") + "。"
-                        : ""),
+                        : "") +
+                      (stat.parkAdj ? "主場球場修正 " + (stat.parkAdj >= 0 ? "+" : "") + stat.parkAdj + " 分(靜態表估計)。" : ""),
                     "自建模型預期總分 <b>" + expTot.toFixed(1) + "</b> 分 vs 盤口總分線 <b>" + totLineNum + "</b>,估計大分機率 " +
                       pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + ",取優勢較高一邊,以場上最佳賠付 <b>" + esc(String(bestT.price)) +
                       "</b>(" + esc(bestT.book) + ") 計損益兩平 " + pctStr(mktT) + ",優勢 <b>" + ((probT - mktT) >= 0 ? "+" : "") +
@@ -1981,6 +2005,7 @@
         return {
           away: applyStarterEraNudge(a, starterEra[a.code]),
           home: applyStarterEraNudge(h, starterEra[h.code]),
+          parkAdj: KBO_PARK_ADJ[h.code] || 0, // KBO teams always host at their own park (no neutral-site games)
         };
       }, 4.4);
     });
@@ -2243,7 +2268,7 @@
       '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
-      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO 大小分另外抓當日先發投手防禦率微調失分預期,同 MLB 的先發 ERA 邏輯;NPB 暫無先發投手資料來源。' +
+      'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO 大小分另外抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯),並加入主場球場修正(靜態表,依 2024 全壘打 park factor 估計,大邱/仁川偏大分,蠶室/高尺/沙職偏小分);NPB 暫無先發投手與球場資料來源。' +
       'CPBL 完全沒有公開賠率市場,卡片標示「模型推算」,以雙方戰績/得失分自建模型,信心度為模型機率與中性 50% 的差距,並非對賭盤優勢,不提供半凱利注碼建議。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
