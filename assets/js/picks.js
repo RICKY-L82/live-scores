@@ -2351,13 +2351,13 @@
     candidates = candidates.filter(function (c) {
       return c.start && new Date(c.start).getTime() > now;
     });
-    var byEdge = function (a, b) { return b.edge - a.edge; };
-    var fiAll = candidates.filter(function (c) { return c.type === "nrfi" || c.type === "yrfi"; }).sort(byEdge);
+    var byProb = function (a, b) { return b.prob - a.prob; };
+    var fiAll = candidates.filter(function (c) { return c.type === "nrfi" || c.type === "yrfi"; }).sort(byProb);
     var fi = fiAll.filter(function (c) { return !c.veto; });
     var vetoed = fiAll.filter(function (c) { return c.veto; });
-    var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byEdge);
-    var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byEdge);
-    var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byEdge);
+    var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byProb);
+    var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byProb);
+    var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byProb);
     var ouMlb = ou.filter(function (c) { return c.league === "MLB"; });
     var ouWnba = ou.filter(function (c) { return c.league === "WNBA"; });
     var spMlb = sp.filter(function (c) { return c.league === "MLB"; });
@@ -2417,7 +2417,7 @@
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
       '共掃描 <b>' + candidates.length + '</b> 個候選,先依聯盟(MLB／WNBA／NBA／KBO／NPB／CPBL)分組,各聯盟下再分「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」等類別,' +
-      '各依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
+      '各依「模型機率」(勝率)由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
       'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯)、主場球場修正(靜態表,依 2024 全壘打 park factor 估計)、以及當日主場高溫預報修正(Open-Meteo,僅溫度,無球場座向資料故不做風向修正)。' +
@@ -2446,7 +2446,7 @@
 
   function run() {
     var el = document.getElementById("picksContent");
-    el.innerHTML = '<div class="detail-loading"><div class="spinner"></div>正在抓取賽程、賠率與數據,計算今日最值得買的五注…</div>';
+    el.innerHTML = '<div class="detail-loading"><div class="spinner"></div>正在抓取賽程、賠率與數據,計算今日勝率最高的五注…</div>';
     document.getElementById("updatedAt").textContent = "計算中…";
     Promise.all([
       collectMlb().catch(function () { return []; }),
