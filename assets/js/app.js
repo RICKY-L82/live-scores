@@ -978,9 +978,13 @@
         (d.records || []).forEach(function (r) {
           (r.teamRecords || []).forEach(function (tr) {
             var lt = ((tr.records && tr.records.splitRecords) || []).find(function (x) { return x.type === "lastTen"; });
+            var ht = ((tr.records && tr.records.splitRecords) || []).find(function (x) { return x.type === "home"; });
             map[tr.team.id] = {
               streak: tr.streak ? tr.streak.streakCode : null,
               lastTen: lt ? lt.wins + "-" + lt.losses : null,
+              // home win% — gates the home-advantage nudge in computeMlbPrediction,
+              // same rule as picks.js's mlbModelHome
+              homeWinPct: ht ? Number(ht.pct || (ht.wins + ht.losses > 0 ? ht.wins / (ht.wins + ht.losses) : 0)) : null,
             };
           });
         });
@@ -1255,8 +1259,10 @@
             modelH += clampNum((aBullEra - hBullEra) * 0.03, -0.045, 0.045);
             mlFactors.push("牛棚 ERA");
           }
-          modelH += 0.035;
-          mlFactors.push("主場優勢");
+          if (hForm && hForm.homeWinPct !== null && hForm.homeWinPct !== undefined && hForm.homeWinPct > 0.6) {
+            modelH += 0.035;
+            mlFactors.push("主場優勢");
+          }
           modelH = clampNum(modelH, 0.05, 0.95);
 
           var result = { ml: { prob: modelH, factors: mlFactors } };
@@ -1585,7 +1591,9 @@
             if (!isNaN(aEraN) && !isNaN(hEraN)) {
               modelH += clampNum((aEraN - hEraN) * 0.04, -0.06, 0.06);
             }
-            modelH += 0.035; // home advantage
+            if (hForm && hForm.homeWinPct !== null && hForm.homeWinPct !== undefined && hForm.homeWinPct > 0.6) {
+              modelH += 0.035; // home advantage — only when the home team actually wins more at home
+            }
             modelH = clampNum(modelH, 0.05, 0.95);
           }
         }

@@ -491,11 +491,15 @@
         (d.records || []).forEach(function (r) {
           (r.teamRecords || []).forEach(function (tr) {
             var lt = ((tr.records && tr.records.splitRecords) || []).find(function (x) { return x.type === "lastTen"; });
+            var ht = ((tr.records && tr.records.splitRecords) || []).find(function (x) { return x.type === "home"; });
             map[tr.team.id] = {
               wins: tr.wins, losses: tr.losses,
               pct: Number(tr.winningPercentage || (tr.wins + tr.losses > 0 ? tr.wins / (tr.wins + tr.losses) : 0)),
               lastTen: lt ? lt.wins + "-" + lt.losses : null,
               streak: tr.streak ? tr.streak.streakCode : null,
+              // home win% — only this team's home-field advantage is used to
+              // gate the +3.5% home-advantage nudge below (see mlbModelHome)
+              homeWinPct: ht ? Number(ht.pct || (ht.wins + ht.losses > 0 ? ht.wins / (ht.wins + ht.losses) : 0)) : null,
             };
           });
         });
@@ -1010,7 +1014,9 @@
   }
 
   // same blend the game-detail modal uses: record share + last-10 share,
-  // starter-ERA nudge, flat home advantage
+  // starter-ERA nudge, conditional home advantage (only when the home team
+  // actually plays like a home team — home win% > 60% — rather than crediting
+  // every home team with a bump regardless of whether it's earned)
   function mlbModelHome(aRec, hRec, aEra, hEra, awayOff, homeOff, aBullEra, hBullEra) {
     if (!aRec || !hRec) return null;
     var comps = [];
@@ -1029,7 +1035,7 @@
     // bullpen ERA: a smaller, secondary nudge — the starter still throws the
     // bulk of a team's innings, so this weighs less than the starter-ERA term
     if (isFinite(aBullEra) && isFinite(hBullEra)) m += clampNum((aBullEra - hBullEra) * 0.03, -0.045, 0.045);
-    m += 0.035;
+    if (hRec.homeWinPct !== null && hRec.homeWinPct !== undefined && hRec.homeWinPct > 0.6) m += 0.035;
     return clampNum(m, 0.05, 0.95);
   }
 
