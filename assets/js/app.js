@@ -144,6 +144,9 @@
   // park/weather run environment (see parkTotalRunAdj/weatherTotalRunAdj below)
   var TOTAL_SD = 4.3; // empirical stdev of MLB combined runs
   var LEAGUE_ERA = 4.2;
+  var LEAGUE_AVG_BA = 0.244; // neutral baseline for the pitcher/hitter matchup deviation below
+  var MATCHUP_MIN_AB = 15;
+  function numOr(v) { var n = Number(v); return isFinite(n) ? n : null; }
   function expectedTotalRuns(aRuns, hRuns, aEra, hEra, parkRunAdj, weatherRunAdj) {
     if (!aRuns || !hRuns || aRuns.rsAvg === null || hRuns.rsAvg === null) return null;
     var tot = (aRuns.rsAvg + hRuns.raAvg) / 2 + (hRuns.rsAvg + aRuns.raAvg) / 2;
@@ -987,6 +990,84 @@
       .catch(function () { return {}; });
   }
 
+  // one call covers every team's bullpen ERA for the season — mirrors
+  // assets/js/picks.js's fetchBullpenEraMap, feeds the moneyline model
+  var bullpenEraCache = { t: 0, map: null };
+  function getBullpenEraMap() {
+    if (bullpenEraCache.map && Date.now() - bullpenEraCache.t < 600000) return Promise.resolve(bullpenEraCache.map);
+    var season = new Date().getFullYear();
+    return fetchJson("https://statsapi.mlb.com/api/v1/teams/stats?stats=statSplits&sitCodes=rp&group=pitching&season=" +
+        season + "&sportIds=1")
+      .then(function (d) {
+        var map = {};
+        var splits = (d.stats && d.stats[0] && d.stats[0].splits) || [];
+        splits.forEach(function (sp) {
+          var era = numOr(sp.stat && sp.stat.era);
+          if (era !== null && sp.team) map[sp.team.id] = era;
+        });
+        bullpenEraCache = { t: Date.now(), map: map };
+        return map;
+      })
+      .catch(function () { return {}; });
+  }
+
+  // ---------- batter-vs-pitcher matchup signal — mirrors picks.js ----------
+  // pitcher's own career line vs the opposing team, blended with that team's
+  // currently-posted top-3 hitters' own career line vs this exact starter.
+  // Needs a posted lineup (only available ~1-3h before first pitch), so this
+  // is often null well ahead of game time — that's fine, it's an optional nudge.
+  function fetchBoxTop3(pk) {
+    return fetchJson("https://statsapi.mlb.com/api/v1/game/" + pk + "/boxscore")
+      .then(function (d) {
+        function top3(side) {
+          var bo = d.teams && d.teams[side] && d.teams[side].battingOrder;
+          return (bo && bo.length >= 3) ? bo.slice(0, 3) : [];
+        }
+        return { awayTop3: top3("away"), homeTop3: top3("home") };
+      })
+      .catch(function () { return { awayTop3: [], homeTop3: [] }; });
+  }
+  function fetchPitcherVsTeam(pitcherId, teamId) {
+    if (!pitcherId || !teamId) return Promise.resolve(null);
+    return fetchJson("https://statsapi.mlb.com/api/v1/people/" + pitcherId +
+        "/stats?stats=vsTeamTotal&opposingTeamId=" + teamId + "&group=pitching")
+      .then(function (d) {
+        var sp = d.stats && d.stats[0] && d.stats[0].splits && d.stats[0].splits[0];
+        var st = sp && sp.stat;
+        var ab = st && numOr(st.atBats);
+        return st && ab >= MATCHUP_MIN_AB ? { avg: numOr(st.avg), atBats: ab } : null;
+      })
+      .catch(function () { return null; });
+  }
+  function fetchHittersVsPitcher(batterIds, pitcherId) {
+    if (!batterIds || !batterIds.length || !pitcherId) return Promise.resolve(null);
+    var url = "https://statsapi.mlb.com/api/v1/people?personIds=" + batterIds.join(",") +
+      "&hydrate=stats(group=[hitting],type=[vsPlayerTotal],opposingPlayerId=" + pitcherId + ")";
+    return fetchJson(url).then(function (d) {
+      var ab = 0, hits = 0;
+      (d.people || []).forEach(function (p) {
+        var sp = p.stats && p.stats[0] && p.stats[0].splits && p.stats[0].splits[0];
+        var st = sp && sp.stat;
+        if (!st) return;
+        var a = numOr(st.atBats);
+        if (a) { ab += a; hits += numOr(st.hits) || 0; }
+      });
+      return ab >= MATCHUP_MIN_AB ? { avg: hits / ab, atBats: ab } : null;
+    }).catch(function () { return null; });
+  }
+  // AB-weighted blend of the pitcher's own history vs this team with this
+  // lineup's own history vs this pitcher; one lopsided sample is capped so it
+  // can't dominate the other
+  function combineMatchup(pitcherLine, hitterLine) {
+    var ab = 0, weighted = 0;
+    [pitcherLine, hitterLine].forEach(function (m) {
+      if (!m) return;
+      var w = Math.min(m.atBats, 100);
+      ab += w; weighted += m.avg * w;
+    });
+    return ab > 0 ? { avg: weighted / ab, atBats: ab } : null;
+  }
+
   // ---------- MLB detail ----------
   function renderMlbDetail(game, body) {
     return fetchJson("https://statsapi.mlb.com/api/v1.1/game/" + game.gamePk + "/feed/live").then(function (f) {
@@ -1116,6 +1197,8 @@
         Promise.all(statFetches),
         getTeamFirstInningRates(awayTeam.id),
         getTeamFirstInningRates(homeTeam.id),
+        getBullpenEraMap(),
+        fetchBoxTop3(game.gamePk),
       ]).then(function (results) {
         var formMap = results[0];
         var statsById = {};
@@ -1127,69 +1210,92 @@
           }
         });
         var awayFi = results[2], homeFi = results[3];
+        var bullpenMap = results[4], box = results[5];
         var aForm = formMap[awayTeam.id], hForm = formMap[homeTeam.id];
         var aSt = pp.away ? (statsById[pp.away.id] || {}) : null;
         var hSt = pp.home ? (statsById[pp.home.id] || {}) : null;
 
-        var comps = [], mlFactors = [];
-        var aP = Number(ar.pct), hP = Number(hr.pct);
-        if (aP + hP > 0) { comps.push(hP / (aP + hP)); mlFactors.push("戰績"); }
-        function l10rate(fm) {
-          if (!fm || !fm.lastTen) return null;
-          var parts = fm.lastTen.split("-");
-          var w = Number(parts[0]), l = Number(parts[1]);
-          return (w + l) > 0 ? w / (w + l) : null;
-        }
-        var aL10 = l10rate(aForm), hL10 = l10rate(hForm);
-        if (aL10 !== null && hL10 !== null && aL10 + hL10 > 0) { comps.push(hL10 / (aL10 + hL10)); mlFactors.push("近十場"); }
-        if (!comps.length) return null;
-        var modelH = comps.reduce(function (x, y) { return x + y; }, 0) / comps.length;
-        var aEraN = aSt && aSt.era ? Number(aSt.era) : NaN;
-        var hEraN = hSt && hSt.era ? Number(hSt.era) : NaN;
-        if (!isNaN(aEraN) && !isNaN(hEraN)) {
-          modelH += clampNum((aEraN - hEraN) * 0.04, -0.06, 0.06);
-          mlFactors.push("先發 ERA");
-        }
-        modelH += 0.035;
-        mlFactors.push("主場優勢");
-        modelH = clampNum(modelH, 0.05, 0.95);
+        // batter-vs-pitcher matchup signal — same as picks.js's mlbModelHome
+        return Promise.all([
+          fetchPitcherVsTeam(pp.away && pp.away.id, homeTeam.id), // away starter's career line vs home team
+          fetchPitcherVsTeam(pp.home && pp.home.id, awayTeam.id), // home starter's career line vs away team
+          fetchHittersVsPitcher(box.homeTop3, pp.away && pp.away.id), // home hitters vs away starter
+          fetchHittersVsPitcher(box.awayTop3, pp.home && pp.home.id), // away hitters vs home starter
+        ]).then(function (mres) {
+          var homeOff = combineMatchup(mres[0], mres[2]);
+          var awayOff = combineMatchup(mres[1], mres[3]);
 
-        var result = { ml: { prob: modelH, factors: mlFactors } };
-
-        var od = game.odds;
-        if (od && od.spHome && od.spHome.line !== undefined && od.spHome.line !== null) {
-          var spLine = Number(od.spHome.line);
-          if (isFinite(spLine)) {
-            result.spread = { prob: homeCoverProb(modelH, spLine, TOTAL_SD), line: spLine, factors: mlFactors };
+          var comps = [], mlFactors = [];
+          var aP = Number(ar.pct), hP = Number(hr.pct);
+          if (aP + hP > 0) { comps.push(hP / (aP + hP)); mlFactors.push("戰績"); }
+          function l10rate(fm) {
+            if (!fm || !fm.lastTen) return null;
+            var parts = fm.lastTen.split("-");
+            var w = Number(parts[0]), l = Number(parts[1]);
+            return (w + l) > 0 ? w / (w + l) : null;
           }
-        }
-
-        var totLine = null;
-        if (od) {
-          if (od.over && od.over.line) {
-            var tl = Number(stripOU(od.over.line));
-            if (isFinite(tl) && tl > 0) totLine = tl;
-          } else if (od.overUnder !== null && od.overUnder !== undefined) {
-            var tl2 = Number(od.overUnder);
-            if (isFinite(tl2) && tl2 > 0) totLine = tl2;
+          var aL10 = l10rate(aForm), hL10 = l10rate(hForm);
+          if (aL10 !== null && hL10 !== null && aL10 + hL10 > 0) { comps.push(hL10 / (aL10 + hL10)); mlFactors.push("近十場"); }
+          if (!comps.length) return null;
+          var modelH = comps.reduce(function (x, y) { return x + y; }, 0) / comps.length;
+          var aEraN = aSt && aSt.era ? Number(aSt.era) : NaN;
+          var hEraN = hSt && hSt.era ? Number(hSt.era) : NaN;
+          if (!isNaN(aEraN) && !isNaN(hEraN)) {
+            modelH += clampNum((aEraN - hEraN) * 0.04, -0.06, 0.06);
+            mlFactors.push("先發 ERA");
           }
-        }
-        var venueName = gd.venue && gd.venue.name;
-        var parkRunAdj = parkTotalRunAdj(venueName);
-        var weatherRunAdj = weatherTotalRunAdj(gd.weather);
-        var aStT = pp.away ? (statsById[pp.away.id] || {}) : {};
-        var hStT = pp.home ? (statsById[pp.home.id] || {}) : {};
-        var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, parkRunAdj, weatherRunAdj);
-        if (totLine !== null && expTot !== null) {
-          var totFactors = ["兩隊近況得失分"];
-          if (aStT.era || hStT.era) totFactors.push("先發 ERA");
-          if (parkRunAdj) totFactors.push("球場");
-          if (weatherRunAdj) totFactors.push("天氣");
-          result.total = { prob: overProbOf(expTot, totLine), line: totLine, factors: totFactors };
-        }
+          if (homeOff || awayOff) {
+            var homeAvg = homeOff ? homeOff.avg : LEAGUE_AVG_BA;
+            var awayAvg = awayOff ? awayOff.avg : LEAGUE_AVG_BA;
+            modelH += clampNum((homeAvg - awayAvg) * 0.6, -0.05, 0.05);
+            mlFactors.push("打者對戰先發");
+          }
+          var aBullEra = bullpenMap[awayTeam.id], hBullEra = bullpenMap[homeTeam.id];
+          if (isFinite(aBullEra) && isFinite(hBullEra)) {
+            modelH += clampNum((aBullEra - hBullEra) * 0.03, -0.045, 0.045);
+            mlFactors.push("牛棚 ERA");
+          }
+          modelH += 0.035;
+          mlFactors.push("主場優勢");
+          modelH = clampNum(modelH, 0.05, 0.95);
 
-        predictCache[game.id] = { t: Date.now(), v: result };
-        return result;
+          var result = { ml: { prob: modelH, factors: mlFactors } };
+
+          var od = game.odds;
+          if (od && od.spHome && od.spHome.line !== undefined && od.spHome.line !== null) {
+            var spLine = Number(od.spHome.line);
+            if (isFinite(spLine)) {
+              result.spread = { prob: homeCoverProb(modelH, spLine, TOTAL_SD), line: spLine, factors: mlFactors };
+            }
+          }
+
+          var totLine = null;
+          if (od) {
+            if (od.over && od.over.line) {
+              var tl = Number(stripOU(od.over.line));
+              if (isFinite(tl) && tl > 0) totLine = tl;
+            } else if (od.overUnder !== null && od.overUnder !== undefined) {
+              var tl2 = Number(od.overUnder);
+              if (isFinite(tl2) && tl2 > 0) totLine = tl2;
+            }
+          }
+          var venueName = gd.venue && gd.venue.name;
+          var parkRunAdj = parkTotalRunAdj(venueName);
+          var weatherRunAdj = weatherTotalRunAdj(gd.weather);
+          var aStT = pp.away ? (statsById[pp.away.id] || {}) : {};
+          var hStT = pp.home ? (statsById[pp.home.id] || {}) : {};
+          var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, parkRunAdj, weatherRunAdj);
+          if (totLine !== null && expTot !== null) {
+            var totFactors = ["兩隊近況得失分"];
+            if (aStT.era || hStT.era) totFactors.push("先發 ERA");
+            if (parkRunAdj) totFactors.push("球場");
+            if (weatherRunAdj) totFactors.push("天氣");
+            result.total = { prob: overProbOf(expTot, totLine), line: totLine, factors: totFactors };
+          }
+
+          predictCache[game.id] = { t: Date.now(), v: result };
+          return result;
+        });
       });
     }).catch(function () { return null; });
   }
