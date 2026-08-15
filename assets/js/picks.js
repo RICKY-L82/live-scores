@@ -1110,9 +1110,9 @@
           if (modelH !== null) {
             var pickHome, edge, prob, market, price;
             if (fair) {
-              // market available: pick the side with the bigger model-vs-market edge
+              // market available: pick the side the model gives the higher win probability
               var edgeH = modelH - fair.home, edgeA = (1 - modelH) - fair.away;
-              pickHome = edgeH >= edgeA;
+              pickHome = modelH >= 0.5;
               edge = pickHome ? edgeH : edgeA;
               prob = pickHome ? modelH : 1 - modelH;
               market = pickHome ? fair.home : fair.away;
@@ -1180,8 +1180,7 @@
               var pHomeCover = homeCoverProb(modelH, sp.home.line, TOTAL_SD);
               var beHomeSp = impliedProb(sp.home.price), beAwaySp = impliedProb(sp.away.price);
               if (beHomeSp !== null && beAwaySp !== null) {
-                var edgeHomeSp = pHomeCover - beHomeSp, edgeAwaySp = (1 - pHomeCover) - beAwaySp;
-                var pickHomeSp = edgeHomeSp >= edgeAwaySp;
+                var pickHomeSp = pHomeCover >= 0.5;
                 var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
                 var beSp = pickHomeSp ? beHomeSp : beAwaySp;
                 var lineSp = pickHomeSp ? sp.home.line : sp.away.line;
@@ -1279,7 +1278,7 @@
               beNr = pickNrfi ? beN : beY;
               priceLabel = (pickNrfi ? nrOdds.under : nrOdds.over) + "(" + nrOdds.book + ")";
               reasons2.push("實際賠率(" + esc(nrOdds.book) + "):NRFI(Under 0.5)" + esc(nrOdds.under) +
-                " / YRFI(Over 0.5)" + esc(nrOdds.over) + ",取優勢較高的一邊。");
+                " / YRFI(Over 0.5)" + esc(nrOdds.over) + ",取模型機率較高的一邊。");
             } else {
               // no market found: assume the common -110 line
               pickNrfi = nrfi >= 0.5;
@@ -1335,8 +1334,7 @@
             var pOver = overProbOf(expTot, tot.line);
             var beO = impliedProb(tot.over), beU = impliedProb(tot.under);
             if (beO !== null && beU !== null) {
-              var edgeO = pOver - beO, edgeU = (1 - pOver) - beU;
-              var pickOver = edgeO >= edgeU;
+              var pickOver = pOver >= 0.5;
               var probT = pickOver ? pOver : 1 - pOver;
               var beT = pickOver ? beO : beU;
               var reasons3 = [
@@ -1418,7 +1416,7 @@
               if (!fair) return null;
               var modelH = hProj / (aProj + hProj);
               var edgeH = modelH - fair.home, edgeA = (1 - modelH) - fair.away;
-              var pickHome = edgeH >= edgeA;
+              var pickHome = modelH >= 0.5;
               var edge = pickHome ? edgeH : edgeA;
               var prob = pickHome ? modelH : 1 - modelH;
               var reasons = [
@@ -1536,8 +1534,7 @@
           var pOver = 1 - normCdf((tot.line - expTot) / WNBA_TOTAL_SD);
           var beO = impliedProb(tot.over), beU = impliedProb(tot.under);
           if (beO !== null && beU !== null) {
-            var edgeO = pOver - beO, edgeU = (1 - pOver) - beU;
-            var pickOver = edgeO >= edgeU;
+            var pickOver = pOver >= 0.5;
             var probT = pickOver ? pOver : 1 - pOver;
             var beT = pickOver ? beO : beU;
             var reasons3 = [
@@ -1566,8 +1563,7 @@
           var pHomeCover = homeCoverProb(modelH, sp.home.line, WNBA_TOTAL_SD);
           var beHomeSp = impliedProb(sp.home.price), beAwaySp = impliedProb(sp.away.price);
           if (beHomeSp !== null && beAwaySp !== null) {
-            var edgeHomeSp = pHomeCover - beHomeSp, edgeAwaySp = (1 - pHomeCover) - beAwaySp;
-            var pickHomeSp = edgeHomeSp >= edgeAwaySp;
+            var pickHomeSp = pHomeCover >= 0.5;
             var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
             var beSp = pickHomeSp ? beHomeSp : beAwaySp;
             var lineSp = pickHomeSp ? sp.home.line : sp.away.line;
@@ -1989,8 +1985,7 @@
           var bestHome = bestAmerican(homePrices), bestAway = bestAmerican(awayPrices);
           if (bestHome && bestAway) {
             var beHome = impliedProb(bestHome.price), beAway = impliedProb(bestAway.price);
-            var edgeHome = homeProb - beHome, edgeAway = (1 - homeProb) - beAway;
-            var pickHome = edgeHome >= edgeAway;
+            var pickHome = homeProb >= 0.5;
             var prob = pickHome ? homeProb : 1 - homeProb;
             var mkt = pickHome ? beHome : beAway;
             var best = pickHome ? bestHome : bestAway;
@@ -2007,7 +2002,7 @@
               ] : [
                 "全市場(" + homeFair.length + " 家書商)去水位平均勝率:主 " + pctStr(homeProb) + " / 客 " + pctStr(1 - homeProb) +
                   "(球隊未能比對到戰績資料,退回跨書商比價)。",
-                "取優勢較高的一邊,以場上最佳賠付 <b>" + esc(String(best.price)) + "</b>(" + esc(best.book) + ") 計損益兩平 " +
+                "取模型機率較高的一邊,以場上最佳賠付 <b>" + esc(String(best.price)) + "</b>(" + esc(best.book) + ") 計損益兩平 " +
                   pctStr(mkt) + ",優勢 <b>" + ((prob - mkt) >= 0 ? "+" : "") + ((prob - mkt) * 100).toFixed(1) + "%</b>。",
               ],
             }));
@@ -2041,8 +2036,7 @@
               var bestUnder = bestAmerican(totRows.map(function (r) { return { price: r.under, book: r.book }; }));
               if (bestOver && bestUnder) {
                 var beOver = impliedProb(bestOver.price), beUnder = impliedProb(bestUnder.price);
-                var edgeOver = pOver - beOver, edgeUnder = (1 - pOver) - beUnder;
-                var pickOver = edgeOver >= edgeUnder;
+                var pickOver = pOver >= 0.5;
                 var probT = pickOver ? pOver : 1 - pOver;
                 var mktT = pickOver ? beOver : beUnder;
                 var bestT = pickOver ? bestOver : bestUnder;
@@ -2068,7 +2062,7 @@
                   ] : [
                     "總分線 " + totLineNum + "(" + totRows.length + " 家書商同線)去水位平均:大分 " + pctStr(pOver) +
                       " / 小分 " + pctStr(1 - pOver) + "(球隊未能比對到戰績資料,退回跨書商比價)。",
-                    "取優勢較高的一邊,以場上最佳賠付 <b>" + esc(String(bestT.price)) + "</b>(" + esc(bestT.book) + ") 計損益兩平 " +
+                    "取模型機率較高的一邊,以場上最佳賠付 <b>" + esc(String(bestT.price)) + "</b>(" + esc(bestT.book) + ") 計損益兩平 " +
                       pctStr(mktT) + ",優勢 <b>" + ((probT - mktT) >= 0 ? "+" : "") + ((probT - mktT) * 100).toFixed(1) + "%</b>。",
                   ],
                 }));
@@ -2103,8 +2097,7 @@
               var bestAwaySp = bestAmerican(spRows.map(function (r) { return { price: r.awayPrice, book: r.book }; }));
               if (bestHomeSp && bestAwaySp) {
                 var beHomeSp = impliedProb(bestHomeSp.price), beAwaySp = impliedProb(bestAwaySp.price);
-                var edgeHomeSp = pHomeCover - beHomeSp, edgeAwaySp = (1 - pHomeCover) - beAwaySp;
-                var pickHomeSp = edgeHomeSp >= edgeAwaySp;
+                var pickHomeSp = pHomeCover >= 0.5;
                 var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
                 var mktSp = pickHomeSp ? beHomeSp : beAwaySp;
                 var bestSp = pickHomeSp ? bestHomeSp : bestAwaySp;
@@ -2123,7 +2116,7 @@
                   ] : [
                     "讓分線 主" + (spLineNum >= 0 ? "+" : "") + spLineNum + "(" + spRows.length + " 家書商同線)去水位平均覆蓋率:主 " +
                       pctStr(pHomeCover) + " / 客 " + pctStr(1 - pHomeCover) + "(球隊未能比對到戰績資料,退回跨書商比價)。",
-                    "取優勢較高的一邊,以場上最佳賠付 <b>" + esc(String(bestSp.price)) + "</b>(" + esc(bestSp.book) + ") 計損益兩平 " +
+                    "取模型機率較高的一邊,以場上最佳賠付 <b>" + esc(String(bestSp.price)) + "</b>(" + esc(bestSp.book) + ") 計損益兩平 " +
                       pctStr(mktSp) + ",優勢 <b>" + ((probSp - mktSp) >= 0 ? "+" : "") + ((probSp - mktSp) * 100).toFixed(1) + "%</b>。",
                   ],
                 }));
