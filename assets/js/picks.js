@@ -1272,9 +1272,9 @@
             var nrOdds = nrfiOddsMap[away.name + "|" + home.name] || null;
             var pickNrfi, prob2, beNr, priceLabel;
             if (nrOdds) {
-              // real prices: pick whichever side has the bigger edge
+              // real prices: pick whichever side has the higher model probability
               var beN = impliedProb(nrOdds.under), beY = impliedProb(nrOdds.over);
-              pickNrfi = (nrfi - beN) >= ((1 - nrfi) - beY);
+              pickNrfi = nrfi >= 0.5;
               prob2 = pickNrfi ? nrfi : 1 - nrfi;
               beNr = pickNrfi ? beN : beY;
               priceLabel = (pickNrfi ? nrOdds.under : nrOdds.over) + "(" + nrOdds.book + ")";
