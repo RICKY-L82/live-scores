@@ -147,15 +147,63 @@
   var LEAGUE_AVG_BA = 0.244; // neutral baseline for the pitcher/hitter matchup deviation below
   var MATCHUP_MIN_AB = 15;
   function numOr(v) { var n = Number(v); return isFinite(n) ? n : null; }
-  function expectedTotalRuns(aRuns, hRuns, aEra, hEra, parkRunAdj, weatherRunAdj) {
+  function expectedTotalRuns(aRuns, hRuns, aEra, hEra, leagueEra, parkRunAdj, weatherRunAdj, awayOff, homeOff, aBullEra, hBullEra, leagueBullEra) {
     if (!aRuns || !hRuns || aRuns.rsAvg === null || hRuns.rsAvg === null) return null;
+    leagueEra = isFinite(leagueEra) && leagueEra > 0 ? leagueEra : LEAGUE_ERA;
     var tot = (aRuns.rsAvg + hRuns.raAvg) / 2 + (hRuns.rsAvg + aRuns.raAvg) / 2;
     [aEra, hEra].forEach(function (e) {
       e = Number(e);
-      if (isFinite(e) && e > 0) tot += clampNum((e - LEAGUE_ERA) * 0.22, -0.7, 0.7);
+      if (isFinite(e) && e > 0) tot += clampNum((e - leagueEra) * 0.22, -0.7, 0.7);
+    });
+    // bullpen ERA gets its own, smaller nudge — a starter typically covers
+    // more of a game's innings than the pen does
+    leagueBullEra = isFinite(leagueBullEra) && leagueBullEra > 0 ? leagueBullEra : LEAGUE_ERA;
+    [aBullEra, hBullEra].forEach(function (e) {
+      e = Number(e);
+      if (isFinite(e) && e > 0) tot += clampNum((e - leagueBullEra) * 0.15, -0.5, 0.5);
+    });
+    // each side's offense-vs-today's-opposing-starter matchup average nudges
+    // the total the same direction a hot/cold matchup would in practice
+    [awayOff, homeOff].forEach(function (m) {
+      if (m) tot += clampNum((m.avg - LEAGUE_AVG_BA) * 4, -0.4, 0.4);
     });
     tot += (parkRunAdj || 0) + (weatherRunAdj || 0);
     return clampNum(tot, 5, 13.5);
+  }
+  // derives today's live starter-ERA baseline from the actual probable-pitcher
+  // pool instead of a fixed constant — mirrors picks.js's leagueEraFromPool
+  var leagueEraCache = { t: 0, dateStr: null, v: null };
+  function getDynLeagueEra() {
+    var dateStr = usDateStrFor(state.date);
+    if (leagueEraCache.v !== null && leagueEraCache.dateStr === dateStr && Date.now() - leagueEraCache.t < 600000) {
+      return Promise.resolve(leagueEraCache.v);
+    }
+    return fetchJson("https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=" + dateStr + "&hydrate=probablePitcher")
+      .then(function (data) {
+        var ids = [];
+        (data.dates || []).forEach(function (d) {
+          (d.games || []).forEach(function (g) {
+            var gpp = g.probablePitchers || {};
+            if (gpp.away) ids.push(gpp.away.id);
+            if (gpp.home) ids.push(gpp.home.id);
+          });
+        });
+        if (!ids.length) return LEAGUE_ERA;
+        return fetchJson("https://statsapi.mlb.com/api/v1/people?personIds=" + ids.join(",") +
+            "&hydrate=stats(group=[pitching],type=[season])")
+          .then(function (d) {
+            var vals = [];
+            (d.people || []).forEach(function (p) {
+              var splits = p.stats && p.stats[0] && p.stats[0].splits;
+              var st = splits && splits[0] && splits[0].stat;
+              var e = st && Number(st.era);
+              if (isFinite(e) && e > 0 && e < 15) vals.push(e);
+            });
+            return vals.length >= 10 ? vals.reduce(function (a, b) { return a + b; }, 0) / vals.length : LEAGUE_ERA;
+          }).catch(function () { return LEAGUE_ERA; });
+      })
+      .then(function (v) { leagueEraCache = { t: Date.now(), dateStr: dateStr, v: v }; return v; })
+      .catch(function () { return LEAGUE_ERA; });
   }
   // Abramowitz-Stegun normal CDF approximation
   function normCdf(z) {
@@ -1203,6 +1251,7 @@
         getTeamFirstInningRates(homeTeam.id),
         getBullpenEraMap(),
         fetchBoxTop3(game.gamePk),
+        getDynLeagueEra(),
       ]).then(function (results) {
         var formMap = results[0];
         var statsById = {};
@@ -1214,7 +1263,7 @@
           }
         });
         var awayFi = results[2], homeFi = results[3];
-        var bullpenMap = results[4], box = results[5];
+        var bullpenMap = results[4], box = results[5], dynLeagueEra = results[6];
         var aForm = formMap[awayTeam.id], hForm = formMap[homeTeam.id];
         var aSt = pp.away ? (statsById[pp.away.id] || {}) : null;
         var hSt = pp.home ? (statsById[pp.home.id] || {}) : null;
@@ -1290,10 +1339,15 @@
           var weatherRunAdj = weatherTotalRunAdj(gd.weather);
           var aStT = pp.away ? (statsById[pp.away.id] || {}) : {};
           var hStT = pp.home ? (statsById[pp.home.id] || {}) : {};
-          var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, parkRunAdj, weatherRunAdj);
+          var bullVals = Object.keys(bullpenMap).map(function (id) { return bullpenMap[id]; }).filter(function (v) { return isFinite(v) && v > 0; });
+          var dynLeagueBullEra = bullVals.length ? bullVals.reduce(function (a, b) { return a + b; }, 0) / bullVals.length : LEAGUE_ERA;
+          var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, dynLeagueEra, parkRunAdj, weatherRunAdj,
+            awayOff, homeOff, aBullEra, hBullEra, dynLeagueBullEra);
           if (totLine !== null && expTot !== null) {
             var totFactors = ["兩隊近況得失分"];
             if (aStT.era || hStT.era) totFactors.push("先發 ERA");
+            if (isFinite(aBullEra) && isFinite(hBullEra)) totFactors.push("牛棚 ERA");
+            if (homeOff || awayOff) totFactors.push("打者對戰先發");
             if (parkRunAdj) totFactors.push("球場");
             if (weatherRunAdj) totFactors.push("天氣");
             result.total = { prob: overProbOf(expTot, totLine), line: totLine, factors: totFactors };
@@ -1368,6 +1422,16 @@
     var awayTeamId = gd.teams && gd.teams.away && gd.teams.away.id;
     var homeTeamId = gd.teams && gd.teams.home && gd.teams.home.id;
 
+    // posted lineup top-3 (for the batter-vs-pitcher matchup signal) — reuse
+    // the boxscore that's already part of this game's live-feed payload
+    // instead of a separate fetch; empty before lineups post, same as picks.js
+    var lineupBox = ld && ld.boxscore && ld.boxscore.teams;
+    function top3(side) {
+      var bo = lineupBox && lineupBox[side] && lineupBox[side].battingOrder;
+      return (bo && bo.length >= 3) ? bo.slice(0, 3) : [];
+    }
+    var awayTop3 = top3("away"), homeTop3 = top3("home");
+
     return Promise.all([
       getMlbForm(),
       Promise.all(statFetches),
@@ -1375,10 +1439,19 @@
       getTeamFirstInningRates(homeTeamId),
       getPitcherFirstInningSplit(pp.away && pp.away.id),
       getPitcherFirstInningSplit(pp.home && pp.home.id),
+      getBullpenEraMap(),
+      getDynLeagueEra(),
+      fetchPitcherVsTeam(pp.away && pp.away.id, homeTeamId), // away starter's career line vs home team
+      fetchPitcherVsTeam(pp.home && pp.home.id, awayTeamId), // home starter's career line vs away team
+      fetchHittersVsPitcher(homeTop3, pp.away && pp.away.id), // home hitters vs away starter
+      fetchHittersVsPitcher(awayTop3, pp.home && pp.home.id), // away hitters vs home starter
     ]).then(function (results) {
       var formMap = results[0];
       var awayFi = results[2], homeFi = results[3];
       var awayP1 = results[4], homeP1 = results[5];
+      var bullpenMap = results[6], dynLeagueEra = results[7];
+      var homeOff = combineMatchup(results[8], results[10]);
+      var awayOff = combineMatchup(results[9], results[11]);
       var statsById = {};
       results[1].forEach(function (r) {
         if (r && r.people && r.people[0]) {
@@ -1632,7 +1705,11 @@
       var totVenue = gd.venue && gd.venue.name;
       var parkRunAdj = parkTotalRunAdj(totVenue);
       var weatherRunAdj = weatherTotalRunAdj(gd.weather);
-      var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, parkRunAdj, weatherRunAdj);
+      var aBullEra = bullpenMap[awayTeamId], hBullEra = bullpenMap[homeTeamId];
+      var bullVals = Object.keys(bullpenMap).map(function (id) { return bullpenMap[id]; }).filter(function (v) { return isFinite(v) && v > 0; });
+      var dynLeagueBullEra = bullVals.length ? bullVals.reduce(function (a, b) { return a + b; }, 0) / bullVals.length : LEAGUE_ERA;
+      var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, dynLeagueEra, parkRunAdj, weatherRunAdj,
+        awayOff, homeOff, aBullEra, hBullEra, dynLeagueBullEra);
       if (totLine !== null && expTot !== null) {
         var pOver = overProbOf(expTot, totLine);
         var priceReal = !!(oPrice && uPrice);
@@ -1656,7 +1733,17 @@
         }
         if (pp.away && pp.home && (aStT.era || hStT.era)) {
           ouNotes.push("<p>先發 ERA:" + esc(pp.away.fullName) + " <b>" + esc(aStT.era || "-") + "</b> vs " +
-            esc(pp.home.fullName) + " <b>" + esc(hStT.era || "-") + "</b>,對照聯盟平均 " + LEAGUE_ERA.toFixed(2) + " 已計入總分調整。</p>");
+            esc(pp.home.fullName) + " <b>" + esc(hStT.era || "-") + "</b>,對照聯盟平均 " + dynLeagueEra.toFixed(2) + "(依今日先發投手池計算)已計入總分調整。</p>");
+        }
+        if (isFinite(aBullEra) && isFinite(hBullEra)) {
+          ouNotes.push("<p>牛棚 ERA:客 <b>" + aBullEra.toFixed(2) + "</b> vs 主 <b>" + hBullEra.toFixed(2) +
+            "</b>,對照聯盟牛棚平均 " + dynLeagueBullEra.toFixed(2) + " 已計入總分調整。</p>");
+        }
+        if (homeOff || awayOff) {
+          var moMatchupParts = [];
+          if (homeOff) moMatchupParts.push("主隊打線對 " + esc(pp.away.fullName) + " 生涯合計打擊率 " + homeOff.avg.toFixed(3) + "(" + homeOff.atBats + " 打數)");
+          if (awayOff) moMatchupParts.push("客隊打線對 " + esc(pp.home.fullName) + " 生涯合計打擊率 " + awayOff.avg.toFixed(3) + "(" + awayOff.atBats + " 打數)");
+          ouNotes.push("<p>先發對戰數據:" + moMatchupParts.join(";") + ",已計入總分調整。</p>");
         }
         if (parkRunAdj) {
           ouNotes.push("<p>球場「" + esc(totVenue) + "」" + (parkRunAdj > 0 ? "偏打者向,總分預期 +" : "偏投手向,總分預期 ") +
@@ -1673,7 +1760,7 @@
           ((leanOver ? edgeO2 : edgeU2) >= 0 ? "+" : "") + ((leanOver ? edgeO2 : edgeU2) * 100).toFixed(1) + "%)。</p>");
         if (!priceReal) ouNotes.push("<p>ESPN 目前僅提供總分線,大小分價位以常見 -110 參考水位估算,開盤後請以實際賠率為準。</p>");
         inner2 += '<div class="analysis-box" style="margin-top:10px">' + ouNotes.join("") + '</div>' +
-          '<div class="detail-note">預期總分以兩隊近況得失分與先發 ERA 推估,並以常態分布(σ≈' + TOTAL_SD + ')換算大小分機率,僅供參考。</div>';
+          '<div class="detail-note">預期總分以兩隊近況得失分、先發 ERA、牛棚 ERA、先發對戰數據推估,並以常態分布(σ≈' + TOTAL_SD + ')換算大小分機率,僅供參考。</div>';
         html += sectionBlock("大小分(全場總分)賠率分析", inner2);
       }
 
