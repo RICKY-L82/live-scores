@@ -54,8 +54,10 @@
         (data.dates || []).forEach(function (d) {
           (d.games || []).forEach(function (g) {
             var status = g.status || {};
-            if (status.abstractGameState === "Preview" &&
-                !/Postponed|Suspended|Cancelled/i.test(status.detailedState || "")) {
+            // include the whole day's slate (not just not-yet-started games) so
+            // the line-direction history stays visible for 走地 reference after
+            // a game goes live or finishes; only drop games that never traded
+            if (!/Postponed|Suspended|Cancelled/i.test(status.detailedState || "")) {
               games.push({
                 league: "MLB", away: g.teams.away.team.name, home: g.teams.home.team.name,
                 start: g.gameDate, gid: "mlb-" + g.gamePk,
@@ -74,7 +76,8 @@
       .then(function (data) {
         return (data.events || []).filter(function (ev) {
           var st = ev.competitions && ev.competitions[0] && ev.competitions[0].status;
-          return st && st.type && st.type.state === "pre";
+          // keep live/final games too — see fetchMlbGames comment
+          return !(st && st.type && /postponed|cancel/i.test(st.type.name || ""));
         }).map(function (ev) {
           var comp = ev.competitions[0];
           var home = (comp.competitors || []).find(function (c) { return c.homeAway === "home"; });
@@ -122,9 +125,11 @@
       return "https://api.the-odds-api.com/v4/sports/" + sportKey + "/events?apiKey=" + encodeURIComponent(key);
     })
       .then(function (events) {
-        var now = Date.now();
+        // no "live/final" filtering here: The Odds API's free /events endpoint
+        // only lists upcoming (and still-live) events itself, so whatever it
+        // returns today is fair game — see fetchMlbGames comment
         return (events || []).filter(function (ev) {
-          return ev.commence_time && new Date(ev.commence_time).getTime() > now;
+          return !!ev.commence_time;
         }).map(function (ev) {
           return {
             league: leagueLabel, away: ev.away_team, home: ev.home_team,
@@ -274,10 +279,10 @@
   function renderPanel(res) {
     var el = document.getElementById("lineDirContent");
     if (!res.scanned) {
-      el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽賽事(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
+      el.innerHTML = '<div class="empty-state">今天沒有可分析的賽事(休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
       return;
     }
-    var html = '<div class="analysis-box"><p>已掃描 <b>' + res.scanned + '</b> 場今日未開賽賽事(MLB／NBA／WNBA／KBO／NPB),比對每場最早與最新一筆賠率紀錄' +
+    var html = '<div class="analysis-box"><p>已掃描 <b>' + res.scanned + '</b> 場今日賽事(MLB／NBA／WNBA／KBO／NPB,含已開打/已完賽,保留供走地參考),比對每場最早與最新一筆賠率紀錄' +
       '(MLB/NBA/WNBA 伺服器每 20 分鐘擷取一次;KBO/NPB 因共用 The Odds API 配額,每約 4 小時才擷取一次,且僅追蹤獨贏,無大小分/讓分走勢),統計資金與盤口越來越看好的方向。動能清單僅列出隱含機率變動 ≥1 個百分點的場次。</p></div>';
 
     if (!res.mlMoves.length && !res.totMoves.length && !res.lineMoves.length) {
