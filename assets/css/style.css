@@ -310,6 +310,30 @@ body {
 }
 .odds-row b { color: var(--text-dim); font-weight: 600; }
 
+/* Card-level model prediction (獨贏/讓分/大小分) */
+.predict-block {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+}
+.predict-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.predict-line b { color: var(--text-dim); font-weight: 700; }
+.predict-note {
+  margin-top: 4px;
+  color: var(--text-faint);
+  opacity: 0.75;
+}
+.predict-empty { color: var(--text-faint); opacity: 0.7; }
+
 /* Score change flash */
 @keyframes score-flash {
   0% { background: var(--live-bg); }

@@ -164,6 +164,37 @@
   function overProbOf(expTot, line) {
     return 1 - normCdf((line - expTot) / TOTAL_SD);
   }
+  // Inverse normal CDF (Acklam's approximation) + home-cover probability for
+  // a run-line market, given only a moneyline-style home win probability —
+  // mirrors assets/js/picks.js.
+  function invNormCdf(p) {
+    p = clampNum(p, 1e-6, 1 - 1e-6);
+    var a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+      1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+    var b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+      6.680131188771972e+01, -1.328068155288572e+01];
+    var c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+      -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+    var d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+    var plow = 0.02425, phigh = 1 - plow, q, r;
+    if (p < plow) {
+      q = Math.sqrt(-2 * Math.log(p));
+      return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+        ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    }
+    if (p <= phigh) {
+      q = p - 0.5; r = q * q;
+      return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+        (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+    }
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  function homeCoverProb(winProb, homeLine, sigma) {
+    var mu = sigma * invNormCdf(winProb);
+    return 1 - normCdf((-homeLine - mu) / sigma);
+  }
 
   // ---------- park & weather run environment — mirrors assets/js/picks.js ----------
   // these were previously only checked in picks.js's checklist display; this
@@ -502,6 +533,7 @@
       saveSnapshot();
       render();
       updateStatusText();
+      hydratePredictions();
     });
   }
 
@@ -570,6 +602,10 @@
       if (sum || badge) oddsHtml = '<div class="odds-row">' + sum + badge + '</div>';
     }
 
+    var predictHtml = game.status === "scheduled"
+      ? '<div class="predict-block" id="predict-' + esc(game.id) + '"><div class="predict-empty">模型計算中…</div></div>'
+      : "";
+
     return (
       '<div class="game-card clickable" data-gid="' + esc(game.id) + '" style="--league-color:' + color + '">' +
         '<div class="game-status-row"><span class="status-left">' + pinBtn + statusHtml + '</span><span class="game-detail">' + esc(game.detail || "") + '</span></div>' +
@@ -582,6 +618,7 @@
           '<span class="team-score">' + esc(scoreText(game.home.score)) + '</span>' +
         '</div>' +
         oddsHtml +
+        predictHtml +
       '</div>'
     );
   }
@@ -1048,6 +1085,161 @@
         return sp ? sp.stat : null;
       })
       .catch(function () { return null; });
+  }
+
+  // ---------- card-level model predictions (獨贏/讓分/大小分) ----------
+  // Eagerly computed for every scheduled MLB/NBA/WNBA card so the model's
+  // probabilities show up without clicking in — same formulas as the detail
+  // modal (renderMlbPreview / nbaPreviewSections), just packaged per-market
+  // with a short list of which inputs actually moved the number this game.
+  var predictCache = {}; // gameId -> { t, v }
+  function computeMlbPrediction(game) {
+    var hit = predictCache[game.id];
+    if (hit && Date.now() - hit.t < 600000) return Promise.resolve(hit.v);
+    return fetchJson("https://statsapi.mlb.com/api/v1.1/game/" + game.gamePk + "/feed/live").then(function (f) {
+      var gd = f.gameData || {};
+      var pp = gd.probablePitchers || {};
+      var awayTeam = gd.teams && gd.teams.away;
+      var homeTeam = gd.teams && gd.teams.home;
+      var ar = awayTeam && awayTeam.record && awayTeam.record.leagueRecord;
+      var hr = homeTeam && homeTeam.record && homeTeam.record.leagueRecord;
+      if (!ar || !hr) return null;
+
+      var statFetches = [pp.away, pp.home].map(function (p) {
+        return p
+          ? fetchJson("https://statsapi.mlb.com/api/v1/people/" + p.id + "?hydrate=stats(group=[pitching],type=[season])").catch(function () { return null; })
+          : Promise.resolve(null);
+      });
+
+      return Promise.all([
+        getMlbForm(),
+        Promise.all(statFetches),
+        getTeamFirstInningRates(awayTeam.id),
+        getTeamFirstInningRates(homeTeam.id),
+      ]).then(function (results) {
+        var formMap = results[0];
+        var statsById = {};
+        results[1].forEach(function (r) {
+          if (r && r.people && r.people[0]) {
+            var person = r.people[0];
+            var splits = person.stats && person.stats[0] && person.stats[0].splits;
+            statsById[person.id] = (splits && splits[0] && splits[0].stat) || {};
+          }
+        });
+        var awayFi = results[2], homeFi = results[3];
+        var aForm = formMap[awayTeam.id], hForm = formMap[homeTeam.id];
+        var aSt = pp.away ? (statsById[pp.away.id] || {}) : null;
+        var hSt = pp.home ? (statsById[pp.home.id] || {}) : null;
+
+        var comps = [], mlFactors = [];
+        var aP = Number(ar.pct), hP = Number(hr.pct);
+        if (aP + hP > 0) { comps.push(hP / (aP + hP)); mlFactors.push("戰績"); }
+        function l10rate(fm) {
+          if (!fm || !fm.lastTen) return null;
+          var parts = fm.lastTen.split("-");
+          var w = Number(parts[0]), l = Number(parts[1]);
+          return (w + l) > 0 ? w / (w + l) : null;
+        }
+        var aL10 = l10rate(aForm), hL10 = l10rate(hForm);
+        if (aL10 !== null && hL10 !== null && aL10 + hL10 > 0) { comps.push(hL10 / (aL10 + hL10)); mlFactors.push("近十場"); }
+        if (!comps.length) return null;
+        var modelH = comps.reduce(function (x, y) { return x + y; }, 0) / comps.length;
+        var aEraN = aSt && aSt.era ? Number(aSt.era) : NaN;
+        var hEraN = hSt && hSt.era ? Number(hSt.era) : NaN;
+        if (!isNaN(aEraN) && !isNaN(hEraN)) {
+          modelH += clampNum((aEraN - hEraN) * 0.04, -0.06, 0.06);
+          mlFactors.push("先發 ERA");
+        }
+        modelH += 0.035;
+        mlFactors.push("主場優勢");
+        modelH = clampNum(modelH, 0.05, 0.95);
+
+        var result = { ml: { prob: modelH, factors: mlFactors } };
+
+        var od = game.odds;
+        if (od && od.spHome && od.spHome.line !== undefined && od.spHome.line !== null) {
+          var spLine = Number(od.spHome.line);
+          if (isFinite(spLine)) {
+            result.spread = { prob: homeCoverProb(modelH, spLine, TOTAL_SD), line: spLine, factors: mlFactors };
+          }
+        }
+
+        var totLine = null;
+        if (od) {
+          if (od.over && od.over.line) {
+            var tl = Number(stripOU(od.over.line));
+            if (isFinite(tl) && tl > 0) totLine = tl;
+          } else if (od.overUnder !== null && od.overUnder !== undefined) {
+            var tl2 = Number(od.overUnder);
+            if (isFinite(tl2) && tl2 > 0) totLine = tl2;
+          }
+        }
+        var venueName = gd.venue && gd.venue.name;
+        var parkRunAdj = parkTotalRunAdj(venueName);
+        var weatherRunAdj = weatherTotalRunAdj(gd.weather);
+        var aStT = pp.away ? (statsById[pp.away.id] || {}) : {};
+        var hStT = pp.home ? (statsById[pp.home.id] || {}) : {};
+        var expTot = expectedTotalRuns(awayFi, homeFi, aStT.era, hStT.era, parkRunAdj, weatherRunAdj);
+        if (totLine !== null && expTot !== null) {
+          var totFactors = ["兩隊近況得失分"];
+          if (aStT.era || hStT.era) totFactors.push("先發 ERA");
+          if (parkRunAdj) totFactors.push("球場");
+          if (weatherRunAdj) totFactors.push("天氣");
+          result.total = { prob: overProbOf(expTot, totLine), line: totLine, factors: totFactors };
+        }
+
+        predictCache[game.id] = { t: Date.now(), v: result };
+        return result;
+      });
+    }).catch(function () { return null; });
+  }
+
+  function computeBballPrediction(game) {
+    var hit = predictCache[game.id];
+    if (hit && Date.now() - hit.t < 600000) return Promise.resolve(hit.v);
+    return fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/" + game.league + "/summary?event=" + game.espnId).then(function (s) {
+      var pred = s.predictor;
+      var aProj = pred && pred.awayTeam && parseFloat(pred.awayTeam.gameProjection);
+      var hProj = pred && pred.homeTeam && parseFloat(pred.homeTeam.gameProjection);
+      if (!aProj || !hProj || aProj + hProj <= 0) return null;
+      var result = { ml: { prob: hProj / (aProj + hProj), factors: ["ESPN 勝率預測"] } };
+      predictCache[game.id] = { t: Date.now(), v: result };
+      return result;
+    }).catch(function () { return null; });
+  }
+
+  var PREDICT_FETCHERS = { mlb: computeMlbPrediction, nba: computeBballPrediction, wnba: computeBballPrediction };
+
+  function predictBlockHtml(pred) {
+    if (!pred || !pred.ml) return '<div class="predict-empty">模型資料不足,暫無預測。</div>';
+    var lines = [];
+    lines.push('<div class="predict-line"><span>🎯 獨贏</span><span>主 <b>' + pctStr(pred.ml.prob) +
+      '</b> · 客 <b>' + pctStr(1 - pred.ml.prob) + '</b></span></div>');
+    var factors = pred.ml.factors.slice();
+    if (pred.spread) {
+      var spLine = pred.spread.line;
+      lines.push('<div class="predict-line"><span>📐 讓分 主' + (spLine >= 0 ? "+" : "") + spLine + '</span><span>主 <b>' +
+        pctStr(pred.spread.prob) + '</b> · 客 <b>' + pctStr(1 - pred.spread.prob) + '</b></span></div>');
+    }
+    if (pred.total) {
+      lines.push('<div class="predict-line"><span>📊 大小 ' + pred.total.line + '</span><span>大 <b>' +
+        pctStr(pred.total.prob) + '</b> · 小 <b>' + pctStr(1 - pred.total.prob) + '</b></span></div>');
+      pred.total.factors.forEach(function (f) { if (factors.indexOf(f) === -1) factors.push(f); });
+    }
+    return lines.join("") + '<div class="predict-note">已依' + factors.join("・") + '調整</div>';
+  }
+
+  function hydratePredictions() {
+    LEAGUE_ORDER.forEach(function (key) {
+      var fn = PREDICT_FETCHERS[key];
+      (state.gamesByLeague[key] || []).forEach(function (game) {
+        if (game.status !== "scheduled") return;
+        fn(game).then(function (pred) {
+          var el = document.getElementById("predict-" + game.id);
+          if (el) el.innerHTML = predictBlockHtml(pred);
+        });
+      });
+    });
   }
 
   function renderMlbPreview(game, gd, ld, headerHtml, body) {
