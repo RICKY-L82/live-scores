@@ -1,0 +1,131 @@
+{
+  "date": "2026-08-19",
+  "recordedAt": "2026-08-19T10:45:54.257Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Los Angeles Dodgers",
+        "home": "Colorado Rockies",
+        "start": "2026-08-20T00:40:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.6915451002357116,
+        "edge": 0.16773557642618775,
+        "price": "-110(參考)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "nrfi",
+        "away": "Los Angeles Angels",
+        "home": "Houston Astros",
+        "start": "2026-08-20T00:10:00Z",
+        "pick": "NRFI 首局雙方皆不得分",
+        "prob": 0.6457697495857546,
+        "edge": 0.12196022577623078,
+        "price": "-110(參考)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "nrfi",
+        "away": "Miami Marlins",
+        "home": "Philadelphia Phillies",
+        "start": "2026-08-19T22:05:00Z",
+        "pick": "NRFI 首局雙方皆不得分",
+        "prob": 0.5945697495857546,
+        "edge": 0.07076022577623076,
+        "price": "-110(參考)",
+        "result": null
+      }
+    ],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Los Angeles Dodgers",
+        "home": "Colorado Rockies",
+        "start": "2026-08-20T00:40:00Z",
+        "pick": "Los Angeles Dodgers 客勝",
+        "prob": 0.6635297852900868,
+        "edge": 0.13972026148056294,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Seattle Mariners",
+        "home": "Milwaukee Brewers",
+        "start": "2026-08-19T23:40:00Z",
+        "pick": "Milwaukee Brewers 主勝",
+        "prob": 0.6253619441888992,
+        "edge": 0.1015524203793754,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "San Diego Padres",
+        "home": "New York Mets",
+        "start": "2026-08-19T17:10:00Z",
+        "pick": "San Diego Padres 客勝",
+        "prob": 0.6013638792102206,
+        "edge": 0.07755435540069677,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Los Angeles Dodgers",
+        "home": "Colorado Rockies",
+        "start": "2026-08-20T00:40:00Z",
+        "pick": "Los Angeles Dodgers 客勝",
+        "prob": 0.6635297852900868,
+        "edge": 0.13972026148056294,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Seattle Mariners",
+        "home": "Milwaukee Brewers",
+        "start": "2026-08-19T23:40:00Z",
+        "pick": "Milwaukee Brewers 主勝",
+        "prob": 0.6253619441888992,
+        "edge": 0.1015524203793754,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "San Diego Padres",
+        "home": "New York Mets",
+        "start": "2026-08-19T17:10:00Z",
+        "pick": "San Diego Padres 客勝",
+        "prob": 0.6013638792102206,
+        "edge": 0.07755435540069677,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
