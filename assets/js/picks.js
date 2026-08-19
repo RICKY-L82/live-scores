@@ -2418,9 +2418,9 @@
     Promise.all([
       collectMlb().catch(function () { return []; }),
       Promise.resolve([]), // NBA temporarily disabled — see collectNba() above
-      collectWnba(),
-      collectKbo(),
-      collectNpb(),
+      collectWnba().catch(function () { return []; }),
+      collectKbo().catch(function () { return []; }),
+      collectNpb().catch(function () { return []; }),
       fetchJson("data/picks-stats.json?t=" + Date.now()).catch(function () { return null; }),
     ]).then(function (res) {
       picksStats = res[5];
