@@ -61,7 +61,7 @@ function taipeiToday() {
       if (msg.type() === "error") console.error("[page]", msg.text());
     });
     await page.goto("http://127.0.0.1:" + port + "/picks.html", { waitUntil: "load" });
-    await page.waitForFunction(() => window.__picksReady === true, { timeout: 90000 });
+    await page.waitForFunction(() => window.__picksReady === true, null, { timeout: 90000 });
     sections = await page.evaluate(() => window.__picksSections);
   } finally {
     await browser.close();
