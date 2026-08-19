@@ -2262,27 +2262,6 @@
     return '<details class="picks-section" open>' + head + '<div class="picks-section-body">' + body + '</div></details>';
   }
 
-  function historyStatsHtml() {
-    var rows = Object.keys(SECTION_META).map(function (key) {
-      var s = picksStats && picksStats.sections && picksStats.sections[key];
-      var day = winRateStr(s && s.day) || "資料累積中";
-      var week = winRateStr(s && s.week) || "資料累積中";
-      var month = winRateStr(s && s.month) || "資料累積中";
-      return '<tr><td>' + SECTION_META[key] + '</td><td>' + day + '</td><td>' + week + '</td><td>' + month + '</td></tr>';
-    }).join("");
-    var updated = picksStats && picksStats.updated
-      ? '最後更新 ' + esc(formatTime(picksStats.updated))
-      : "尚無歷史紀錄,排程開始累積後會顯示在這裡。";
-    return '<details class="picks-league-section">' +
-      '<summary class="picks-league-title">📈 歷史勝率(每日／每週／每月)' +
-      '<span class="picks-league-count">' + updated + '</span></summary>' +
-      '<div class="picks-league-body"><div class="table-wrap">' +
-      '<table class="stat-table"><thead><tr><th>區塊</th><th>今日</th><th>本週</th><th>本月</th></tr></thead>' +
-      '<tbody>' + rows + '</tbody></table></div>' +
-      '<p class="detail-note">每天依各區塊模型機率排序,記錄前 3 注(排除機率低於 50% 的候選);今日/本週/本月為已結算賽事的實際中獎率,push/延賽不計入分母。樣本數 &lt;3 顯示「資料累積中」。</p>' +
-      '</div></details>';
-  }
-
   function leagueSectionHtml(icon, title, total, subHtml) {
     var head = '<summary class="picks-league-title">' + icon + " " + title +
       '<span class="picks-league-count">共 ' + total + ' 項候選</span></summary>';
@@ -2393,7 +2372,6 @@
       (keySet ? "🔑 The Odds API 金鑰已啟用(NRFI/YRFI、KBO、NPB 賠率;點此更換金鑰)"
               : "🔑 設定免費 The Odds API 金鑰,即可用真實 NRFI/YRFI、KBO、NPB 賠率取代估算") +
       '</a></p></div>' +
-      historyStatsHtml() +
       mainHtml;
     var lk = document.getElementById("oddsKeyLink");
     if (lk) lk.addEventListener("click", function (e) {
