@@ -304,11 +304,11 @@
   // the key is user-supplied via the 🔑 link and kept in localStorage. Odds
   // are cached 3h to stretch the quota; on any failure picks fall back to the
   // assumed -110 line.
-  // two free-tier keys sharing the load; if the first is out of monthly
-  // credits (API 401/429) calls fall back to the second automatically. A
-  // manually-set localStorage key opts out of the fallback list entirely —
-  // that's the user's own key, not ours to substitute.
-  var DEFAULT_ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd"];
+  // three free-tier keys sharing the load; if one is out of monthly credits
+  // (API 401/429) calls fall back to the next automatically. A manually-set
+  // localStorage key opts out of the fallback list entirely — that's the
+  // user's own key, not ours to substitute.
+  var DEFAULT_ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97"];
   function getOddsApiKeys() {
     try {
       var override = localStorage.getItem("oddsApiKey");
