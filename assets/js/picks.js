@@ -8,6 +8,31 @@
   var NRFI_PRICE = "-110"; // no NRFI market in the free feed; assume the common price
   var TOP_N = 5;
 
+  // populated from data/picks-stats.json before render() runs; null until that
+  // fetch resolves (or on first deploy, before scripts/record-picks.js /
+  // scripts/settle-picks.js have produced the file yet)
+  var picksStats = null;
+
+  // labels for the day/week/month win-rate table and each section's own
+  // 30-day badge — keyed the same way scripts/record-picks.js groups its
+  // snapshot, so the stats file's section keys line up with these directly
+  var SECTION_META = {
+    mlb_fi: "⚾ MLB 首局 NRFI / YRFI",
+    mlb_ou: "⚾ MLB 大小分 Over/Under",
+    mlb_sp: "⚾ MLB 讓分 Run Line",
+    mlb_ml: "⚾ MLB 獨贏勝率",
+    mlb_ml_edge: "⚾ MLB 獨贏優勢",
+    wnba_ou: "🏀 WNBA 大小分 Over/Under",
+    wnba_sp: "🏀 WNBA 讓分 Spread",
+    nba_ml: "🏀 NBA 獨贏勝率",
+    kbo_ml: "🇰🇷 KBO 獨贏勝率",
+    kbo_ou: "🇰🇷 KBO 大小分 Over/Under",
+    kbo_sp: "🇰🇷 KBO 讓分 Run Line",
+    npb_ml: "🇯🇵 NPB 獨贏勝率",
+    npb_ou: "🇯🇵 NPB 大小分 Over/Under",
+    npb_sp: "🇯🇵 NPB 讓分 Run Line",
+  };
+
   // ---------- helpers (mirrors assets/js/app.js) ----------
   function esc(s) {
     if (s === null || s === undefined) return "";
@@ -210,7 +235,7 @@
   }
 
   // generic version of the retry-through-proxies pattern below, for other
-  // no-CORS sources (CPBL/KBO/NPB stats scraping)
+  // no-CORS sources (KBO/NPB stats scraping)
   function fetchViaProxy(url, validator, idx) {
     idx = idx || 0;
     if (idx >= PS_PROXIES.length) return Promise.reject(new Error("all proxies failed"));
@@ -1397,6 +1422,8 @@
   }
 
   // ---------- NBA data (edge = ESPN predictor vs. market) ----------
+  // temporarily disabled (NBA off-season) — kept for when it's re-enabled
+  /*
   function collectNba() {
     var ymd = usTodayISO().replace(/-/g, "");
     return fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + ymd)
@@ -1448,6 +1475,7 @@
       .then(function (arr) { return arr.filter(Boolean); })
       .catch(function () { return []; });
   }
+  */
 
   // ---------- WNBA data (edge = own record/scoring model vs. market) ----------
   // ESPN's free WNBA predictor endpoint only exposes a relative-strength
@@ -1601,11 +1629,11 @@
   // ---------- KBO / NPB: own-stats model (with market-consensus fallback) ----------
   // Neither ESPN nor MLB Stats API covers Korean/Japanese baseball, but two
   // unofficial-ish scrapeable sources fill the gap: atplayertw.com.tw runs a
-  // clean NPB standings table (same template as the CPBL one below), and for
+  // clean NPB standings table, and for
   // KBO — which that site doesn't carry — the official English-language
   // eng.koreabaseball.com turns out to be plain server-rendered ASPX tables,
   // easy to scrape despite being "official". Both feed a real record/scoring
-  // model (statsModelHome/statsExpectedTotal, shared with CPBL) that's then
+  // model (statsModelHome/statsExpectedTotal) that's then
   // compared against The Odds API's real market — the same model-vs-market
   // shape as collectMlb()/collectWnba(), instead of only market-vs-market.
   // When a game's teams can't be matched to stats (site down, name format
@@ -1656,7 +1684,7 @@
       .catch(function () { return []; });
   }
 
-  // record+scoring model shared by CPBL/KBO/NPB's own-stats path (same shape
+  // record+scoring model shared by KBO/NPB's own-stats path (same shape
   // as wnbaModelHome/expectedWnbaTotal: win% comparison + small home nudge,
   // runs-scored/allowed averages folded into an expected total)
   function statsModelHome(aStat, hStat) {
@@ -1669,7 +1697,7 @@
   }
 
   // atplayertw.com.tw/npb/'s "戰績排名" section has two standings tables
-  // (Central + Pacific League), unlike CPBL's one — scan every <table
+  // (Central + Pacific League) — scan every <table
   // class="atp-table"> inside the section rather than just the first so both
   // leagues are captured.
   function parseAtpStandings(html) {
@@ -1736,7 +1764,7 @@
   // npb.jp's own official 予告先発 (probable starters) page has no ERA — only
   // names + player-page links, and fetching each pitcher's own page (~12 per
   // day) through the shared CORS proxy was judged too slow/risky for the
-  // proxy quota shared with CPBL/KBO/MLB. baseball-freak.com/starter.html
+  // proxy quota shared with KBO/MLB. baseball-freak.com/starter.html
   // solves that the same way mykbostats.com does for KBO: one page lists
   // every game's probable starters *and* their season ERA together, so it's
   // a single fetch. Team identity comes from the page's own team-icon
@@ -1773,7 +1801,7 @@
   // TeamStandings.aspx has W/L/PCT; stats/TeamStats.aspx has team batting (R
   // = runs scored) and team pitching (ERA, used as a runs-allowed-per-game
   // proxy since a KBO game is also 9 innings — there's no free "runs
-  // allowed" column the way CPBL/NPB's 得/失 gives one directly). Team
+  // allowed" column the way NPB's 得/失 gives one directly). Team
   // identity is the short code used site-wide (KT, SAMSUNG, LG, DOOSAN, KIA,
   // HANWHA, NC, LOTTE, SSG, KIWOOM); matching against Odds API names is a
   // plain substring check since the 10 codes don't collide with each other.
@@ -2170,122 +2198,6 @@
     });
   }
 
-  // ---------- CPBL (own record/scoring model — no odds market anywhere) ----------
-  // Neither The Odds API nor ESPN lists CPBL. atplayertw.com.tw renders CPBL's
-  // schedule and standings as plain server-side HTML (no CORS header, hence
-  // the same proxy list used for playsport above) — schedule comes from a
-  // schema.org SportsEvent JSON-LD block, standings from its "戰績排名" table
-  // (W/L/PCT/得/失). With no bookmaker to compare against, candidates carry
-  // noMarket:true and use a neutral 50% baseline for "edge" purely to rank
-  // among themselves; 大小分/讓分 fall back to a league-average total and the
-  // MLB-standard ±1.5 run-line convention as reference points instead of a
-  // real posted line. These are model predictions, not value bets — the UI
-  // must not present them as having a real market edge.
-  var CPBL_TOTAL_SD = 4.6; // approx combined-runs stdev; no per-game log available to derive it live
-  function parseCpblSchedule(html) {
-    var games = [];
-    var re = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
-    var m;
-    while ((m = re.exec(html))) {
-      var data;
-      try { data = JSON.parse(m[1]); } catch (e) { continue; }
-      var graph = data["@graph"] || [data];
-      graph.forEach(function (node) {
-        if (!node || node["@type"] !== "ItemList") return;
-        (node.itemListElement || []).forEach(function (li) {
-          var it = li && li.item;
-          if (!it || it["@type"] !== "SportsEvent") return;
-          if (it.eventStatus !== "https://schema.org/EventScheduled") return;
-          if (!it.awayTeam || !it.homeTeam || !it.startDate) return;
-          games.push({ away: it.awayTeam.name, home: it.homeTeam.name, start: it.startDate });
-        });
-      });
-    }
-    return games;
-  }
-  function cpblLeagueAvgTotal(standings) {
-    var vals = [];
-    Object.keys(standings).forEach(function (k) {
-      var r = standings[k];
-      if (r.rsAvg !== null && r.raAvg !== null) vals.push(r.rsAvg + r.raAvg);
-    });
-    return vals.length ? avgArr(vals) : null;
-  }
-  function collectCpbl() {
-    return fetchViaProxy("https://atplayertw.com.tw/cpbl/", "atp-standings").then(function (html) {
-      var games = parseCpblSchedule(html);
-      var standings = parseAtpStandings(html);
-      var leagueAvgTotal = cpblLeagueAvgTotal(standings);
-      var now = Date.now();
-      var candidates = [];
-      games.forEach(function (g) {
-        if (!g.start || new Date(g.start).getTime() <= now) return;
-        var aRec = standings[g.away], hRec = standings[g.home];
-        if (!aRec || !hRec) return;
-        var base = { league: "CPBL", away: g.away, home: g.home, start: g.start };
-        var modelH = statsModelHome(aRec, hRec);
-
-        // -- 獨贏 --
-        if (modelH !== null) {
-          var pickHome = modelH >= 0.5;
-          var prob = pickHome ? modelH : 1 - modelH;
-          candidates.push(Object.assign({}, base, {
-            type: "ml", noMarket: true,
-            pick: pickHome ? g.home + " 主勝" : g.away + " 客勝",
-            price: "—",
-            prob: prob, market: 0.5, edge: prob - 0.5,
-            reasons: [
-              "戰績:客 " + aRec.wins + "-" + aRec.losses + "(勝率 " + pctStr(aRec.winPct) + ") vs 主 " +
-                hRec.wins + "-" + hRec.losses + "(勝率 " + pctStr(hRec.winPct) + ")。",
-              "CPBL 無公開賠率市場,以雙方勝率(主場略加成)推算模型勝率 <b>" + pctStr(prob) + "</b>,為模型預測,非對賭盤優勢。",
-            ],
-          }));
-        }
-
-        // -- 大小分 --
-        var expTot = statsExpectedTotal(aRec, hRec, 4, 20);
-        if (expTot !== null && leagueAvgTotal !== null) {
-          var totLine = Math.round(leagueAvgTotal * 2) / 2;
-          var pOver = 1 - normCdf((totLine - expTot) / CPBL_TOTAL_SD);
-          var pickOver = pOver >= 0.5;
-          var probT = pickOver ? pOver : 1 - pOver;
-          candidates.push(Object.assign({}, base, {
-            type: pickOver ? "over" : "under", noMarket: true,
-            pick: (pickOver ? "大分 Over " : "小分 Under ") + totLine,
-            price: "—",
-            prob: probT, market: 0.5, edge: probT - 0.5,
-            reasons: [
-              "客隊場均得 " + aRec.rsAvg.toFixed(1) + " 分/失 " + aRec.raAvg.toFixed(1) + " 分;主隊場均得 " +
-                hRec.rsAvg.toFixed(1) + " 分/失 " + hRec.raAvg.toFixed(1) + " 分。",
-              "模型預期總分 <b>" + expTot.toFixed(1) + "</b> 分,以聯盟平均總分 <b>" + totLine +
-                "</b> 分為參考基準(CPBL 無公開盤口線),估計大分機率 " + pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + "。",
-            ],
-          }));
-        }
-
-        // -- 讓分 --
-        if (modelH !== null) {
-          var homeLine = modelH >= 0.5 ? -1.5 : 1.5;
-          var pHomeCover = homeCoverProb(modelH, homeLine, CPBL_TOTAL_SD);
-          var pickHomeSp = pHomeCover >= 0.5;
-          var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
-          var spLine = pickHomeSp ? homeLine : -homeLine;
-          candidates.push(Object.assign({}, base, {
-            type: "spread", noMarket: true,
-            pick: (pickHomeSp ? g.home : g.away) + " " + (spLine >= 0 ? "+" : "") + spLine,
-            price: "—",
-            prob: probSp, market: 0.5, edge: probSp - 0.5,
-            reasons: [
-              "模型獨贏勝率 <b>" + pctStr(modelH) + "</b>(主)反推期望分差,以棒球常見的 1.5 分讓分慣例(CPBL 無公開讓分盤口)估計覆蓋機率 <b>" +
-                pctStr(probSp) + "</b>。",
-            ],
-          }));
-        }
-      });
-      return candidates;
-    }).catch(function () { return []; });
-  }
-
   // ---------- render ----------
   var TYPE_LABEL = { ml: "獨贏", nrfi: "首局 NRFI", yrfi: "首局 YRFI", over: "大分", under: "小分", spread: "讓分" };
 
@@ -2323,9 +2235,21 @@
     );
   }
 
-  function sectionHtml(title, list, total) {
+  // "12-7 (63%)"; null when the sample's too thin to be meaningful (also
+  // covers the file not existing yet, before the first scheduled run)
+  function winRateStr(bucket) {
+    if (!bucket) return null;
+    var w = bucket.w || 0, l = bucket.l || 0;
+    if (w + l < 3) return null;
+    return w + "-" + l + " (" + Math.round((w / (w + l)) * 100) + "%)";
+  }
+
+  function sectionHtml(key, title, list, total) {
+    var monthRate = picksStats && picksStats.sections && picksStats.sections[key]
+      ? winRateStr(picksStats.sections[key].month) : null;
     var head = '<summary class="picks-section-title">' + title +
-      '<span class="picks-section-count">候選 ' + total + ' 注</span></summary>';
+      '<span class="picks-section-count">候選 ' + total + ' 注' +
+      (monthRate ? " · 近30天 " + monthRate : "") + '</span></summary>';
     var body;
     if (!list.length) {
       body = '<div class="empty-state">此類別今天沒有可分析的未開賽場次。</div>';
@@ -2336,6 +2260,27 @@
       }
     }
     return '<details class="picks-section" open>' + head + '<div class="picks-section-body">' + body + '</div></details>';
+  }
+
+  function historyStatsHtml() {
+    var rows = Object.keys(SECTION_META).map(function (key) {
+      var s = picksStats && picksStats.sections && picksStats.sections[key];
+      var day = winRateStr(s && s.day) || "資料累積中";
+      var week = winRateStr(s && s.week) || "資料累積中";
+      var month = winRateStr(s && s.month) || "資料累積中";
+      return '<tr><td>' + SECTION_META[key] + '</td><td>' + day + '</td><td>' + week + '</td><td>' + month + '</td></tr>';
+    }).join("");
+    var updated = picksStats && picksStats.updated
+      ? '最後更新 ' + esc(formatTime(picksStats.updated))
+      : "尚無歷史紀錄,排程開始累積後會顯示在這裡。";
+    return '<details class="picks-league-section">' +
+      '<summary class="picks-league-title">📈 歷史勝率(每日／每週／每月)' +
+      '<span class="picks-league-count">' + updated + '</span></summary>' +
+      '<div class="picks-league-body"><div class="table-wrap">' +
+      '<table class="stat-table"><thead><tr><th>區塊</th><th>今日</th><th>本週</th><th>本月</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>' +
+      '<p class="detail-note">每天依各區塊模型機率排序,記錄前 3 注(排除機率低於 50% 的候選);今日/本週/本月為已結算賽事的實際中獎率,push/延賽不計入分母。樣本數 &lt;3 顯示「資料累積中」。</p>' +
+      '</div></details>';
   }
 
   function leagueSectionHtml(icon, title, total, subHtml) {
@@ -2364,19 +2309,22 @@
     var spWnba = sp.filter(function (c) { return c.league === "WNBA"; });
     var mlMlb = ml.filter(function (c) { return c.league === "MLB"; });
     var mlMlbByEdge = mlMlb.slice().sort(byEdge);
-    var mlNba = ml.filter(function (c) { return c.league === "NBA"; });
+    var mlNba = []; // NBA temporarily disabled — ml.filter(function (c) { return c.league === "NBA"; });
     var ouKbo = ou.filter(function (c) { return c.league === "KBO"; });
     var spKbo = sp.filter(function (c) { return c.league === "KBO"; });
     var mlKbo = ml.filter(function (c) { return c.league === "KBO"; });
     var ouNpb = ou.filter(function (c) { return c.league === "NPB"; });
     var spNpb = sp.filter(function (c) { return c.league === "NPB"; });
     var mlNpb = ml.filter(function (c) { return c.league === "NPB"; });
-    var ouCpbl = ou.filter(function (c) { return c.league === "CPBL"; });
-    var spCpbl = sp.filter(function (c) { return c.league === "CPBL"; });
-    var mlCpbl = ml.filter(function (c) { return c.league === "CPBL"; });
 
     if (!fiAll.length && !ml.length && !ou.length && !sp.length) {
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
+      window.__picksSections = {
+        mlb_fi: [], mlb_ou: [], mlb_sp: [], mlb_ml: [], mlb_ml_edge: [],
+        wnba_ou: [], wnba_sp: [], nba_ml: [],
+        kbo_ml: [], kbo_ou: [], kbo_sp: [], npb_ml: [], npb_ou: [], npb_sp: [],
+      };
+      window.__picksReady = true;
       return;
     }
     var vetoHtml = vetoed.length
@@ -2386,49 +2334,66 @@
       : "";
     var keySet = !!getOddsApiKey();
     var mlbSubHtml =
-      sectionHtml("⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
+      sectionHtml("mlb_fi", "⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
       vetoHtml +
-      sectionHtml("📊 大小分 Over/Under", ouMlb.slice(0, TOP_N), ouMlb.length) +
-      sectionHtml("🎯 讓分 Run Line", spMlb.slice(0, TOP_N), spMlb.length) +
-      sectionHtml("🏆 獨贏勝率", mlMlb.slice(0, TOP_N), mlMlb.length) +
-      sectionHtml("🏆 獨贏優勢", mlMlbByEdge.slice(0, TOP_N), mlMlbByEdge.length);
+      sectionHtml("mlb_ou", "📊 大小分 Over/Under", ouMlb.slice(0, TOP_N), ouMlb.length) +
+      sectionHtml("mlb_sp", "🎯 讓分 Run Line", spMlb.slice(0, TOP_N), spMlb.length) +
+      sectionHtml("mlb_ml", "🏆 獨贏勝率", mlMlb.slice(0, TOP_N), mlMlb.length) +
+      sectionHtml("mlb_ml_edge", "🏆 獨贏優勢", mlMlbByEdge.slice(0, TOP_N), mlMlbByEdge.length);
     var wnbaSubHtml =
-      sectionHtml("📊 大小分 Over/Under", ouWnba.slice(0, TOP_N), ouWnba.length) +
-      sectionHtml("🎯 讓分 Spread", spWnba.slice(0, TOP_N), spWnba.length);
-    var nbaSubHtml =
-      sectionHtml("🏆 獨贏勝率", mlNba.slice(0, TOP_N), mlNba.length);
+      sectionHtml("wnba_ou", "📊 大小分 Over/Under", ouWnba.slice(0, TOP_N), ouWnba.length) +
+      sectionHtml("wnba_sp", "🎯 讓分 Spread", spWnba.slice(0, TOP_N), spWnba.length);
+    // NBA temporarily disabled
+    // var nbaSubHtml =
+    //   sectionHtml("nba_ml", "🏆 獨贏勝率", mlNba.slice(0, TOP_N), mlNba.length);
     var kboSubHtml =
-      sectionHtml("🏆 獨贏勝率", mlKbo.slice(0, TOP_N), mlKbo.length) +
-      sectionHtml("📊 大小分 Over/Under", ouKbo.slice(0, TOP_N), ouKbo.length) +
-      sectionHtml("🎯 讓分 Run Line", spKbo.slice(0, TOP_N), spKbo.length);
+      sectionHtml("kbo_ml", "🏆 獨贏勝率", mlKbo.slice(0, TOP_N), mlKbo.length) +
+      sectionHtml("kbo_ou", "📊 大小分 Over/Under", ouKbo.slice(0, TOP_N), ouKbo.length) +
+      sectionHtml("kbo_sp", "🎯 讓分 Run Line", spKbo.slice(0, TOP_N), spKbo.length);
     var npbSubHtml =
-      sectionHtml("🏆 獨贏勝率", mlNpb.slice(0, TOP_N), mlNpb.length) +
-      sectionHtml("📊 大小分 Over/Under", ouNpb.slice(0, TOP_N), ouNpb.length) +
-      sectionHtml("🎯 讓分 Run Line", spNpb.slice(0, TOP_N), spNpb.length);
-    var cpblSubHtml =
-      sectionHtml("🏆 獨贏勝率", mlCpbl.slice(0, TOP_N), mlCpbl.length) +
-      sectionHtml("📊 大小分 Over/Under", ouCpbl.slice(0, TOP_N), ouCpbl.length) +
-      sectionHtml("🎯 讓分 Run Line", spCpbl.slice(0, TOP_N), spCpbl.length);
+      sectionHtml("npb_ml", "🏆 獨贏勝率", mlNpb.slice(0, TOP_N), mlNpb.length) +
+      sectionHtml("npb_ou", "📊 大小分 Over/Under", ouNpb.slice(0, TOP_N), ouNpb.length) +
+      sectionHtml("npb_sp", "🎯 讓分 Run Line", spNpb.slice(0, TOP_N), spNpb.length);
+
+    // slim, serializable snapshot for scripts/record-picks.js (Playwright)
+    // to read via page.evaluate() — same lists/order the page itself shows,
+    // just stripped of reasons/checklist/etc. that aren't needed for settlement
+    function slim(list) {
+      return list.map(function (c) {
+        return {
+          type: c.type, league: c.league, away: c.away, home: c.home,
+          start: c.start, pick: c.pick, prob: c.prob, edge: c.edge, price: c.price,
+        };
+      });
+    }
+    window.__picksSections = {
+      mlb_fi: slim(fi), mlb_ou: slim(ouMlb), mlb_sp: slim(spMlb),
+      mlb_ml: slim(mlMlb), mlb_ml_edge: slim(mlMlbByEdge),
+      wnba_ou: slim(ouWnba), wnba_sp: slim(spWnba),
+      nba_ml: slim(mlNba),
+      kbo_ml: slim(mlKbo), kbo_ou: slim(ouKbo), kbo_sp: slim(spKbo),
+      npb_ml: slim(mlNpb), npb_ou: slim(ouNpb), npb_sp: slim(spNpb),
+    };
+    window.__picksReady = true;
     var mainHtml =
       leagueSectionHtml("⚾", "MLB", fi.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
       leagueSectionHtml("🏀", "WNBA", ouWnba.length + spWnba.length, wnbaSubHtml) +
-      leagueSectionHtml("🏀", "NBA", mlNba.length, nbaSubHtml) +
+      // leagueSectionHtml("🏀", "NBA", mlNba.length, nbaSubHtml) + // NBA temporarily disabled
       leagueSectionHtml("🇰🇷", "KBO 韓國職棒", mlKbo.length + ouKbo.length + spKbo.length, kboSubHtml) +
-      leagueSectionHtml("🇯🇵", "NPB 日本職棒", mlNpb.length + ouNpb.length + spNpb.length, npbSubHtml) +
-      leagueSectionHtml("🇹🇼", "CPBL 中華職棒", mlCpbl.length + ouCpbl.length + spCpbl.length, cpblSubHtml);
+      leagueSectionHtml("🇯🇵", "NPB 日本職棒", mlNpb.length + ouNpb.length + spNpb.length, npbSubHtml);
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
-      '共掃描 <b>' + candidates.length + '</b> 個候選,先依聯盟(MLB／WNBA／NBA／KBO／NPB／CPBL)分組,各聯盟下再分「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」等類別,' +
+      '共掃描 <b>' + candidates.length + '</b> 個候選,先依聯盟(MLB／WNBA／NBA／KBO／NPB)分組,各聯盟下再分「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」等類別,' +
       '各依「模型機率」(勝率)由高至低取前 ' + TOP_N + ' 名;MLB 另外多一個「獨贏優勢」子區塊,同樣是獨贏候選,改依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
       'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯)、主場球場修正(靜態表,依 2024 全壘打 park factor 估計)、以及當日主場高溫預報修正(Open-Meteo,僅溫度,無球場座向資料故不做風向修正)。' +
-      'CPBL 完全沒有公開賠率市場,卡片標示「模型推算」,以雙方戰績/得失分自建模型,信心度為模型機率與中性 50% 的差距,並非對賭盤優勢,不提供半凱利注碼建議。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
       (keySet ? "🔑 The Odds API 金鑰已啟用(NRFI/YRFI、KBO、NPB 賠率;點此更換金鑰)"
               : "🔑 設定免費 The Odds API 金鑰,即可用真實 NRFI/YRFI、KBO、NPB 賠率取代估算") +
       '</a></p></div>' +
+      historyStatsHtml() +
       mainHtml;
     var lk = document.getElementById("oddsKeyLink");
     if (lk) lk.addEventListener("click", function (e) {
@@ -2452,13 +2417,14 @@
     document.getElementById("updatedAt").textContent = "計算中…";
     Promise.all([
       collectMlb().catch(function () { return []; }),
-      collectNba(),
+      Promise.resolve([]), // NBA temporarily disabled — see collectNba() above
       collectWnba(),
       collectKbo(),
       collectNpb(),
-      collectCpbl(),
+      fetchJson("data/picks-stats.json?t=" + Date.now()).catch(function () { return null; }),
     ]).then(function (res) {
-      render(res[0].concat(res[1]).concat(res[2]).concat(res[3]).concat(res[4]).concat(res[5]));
+      picksStats = res[5];
+      render(res[0].concat(res[1]).concat(res[2]).concat(res[3]).concat(res[4]));
       document.getElementById("updatedAt").textContent =
         "計算於 " + new Date().toLocaleTimeString("zh-TW", { hour12: false });
     }).catch(function (err) {

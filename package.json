@@ -1,0 +1,8 @@
+{
+  "name": "live-scores-picks-tracking",
+  "private": true,
+  "description": "CI-only scripts for recording and settling daily picks (see scripts/record-picks.js, scripts/settle-picks.js)",
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}

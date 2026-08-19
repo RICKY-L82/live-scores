@@ -6,7 +6,7 @@
     nba: { label: "NBA 美國職籃", color: "#e0762c" },
     wnba: { label: "WNBA 美國女籃", color: "#b0568f" },
   };
-  var LEAGUE_ORDER = ["mlb", "nba", "wnba"];
+  var LEAGUE_ORDER = ["mlb", /* "nba", */ "wnba"]; // NBA temporarily disabled
 
   var state = {
     date: new Date(),

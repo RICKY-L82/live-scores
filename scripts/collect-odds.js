@@ -28,7 +28,7 @@ const path = require("path");
 
 const LEAGUES = {
   mlb: "baseball/mlb",
-  nba: "basketball/nba",
+  // nba: "basketball/nba", // temporarily disabled — NBA off-season, will re-enable later
   wnba: "basketball/wnba",
 };
 const OUT_DIR = path.join(__dirname, "..", "data", "odds");

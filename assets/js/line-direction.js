@@ -352,7 +352,7 @@
     document.getElementById("updatedAt").textContent = "計算中…";
     Promise.all([
       fetchMlbGames(),
-      fetchEspnGames("nba", "NBA"),
+      Promise.resolve([]), // NBA temporarily disabled — fetchEspnGames("nba", "NBA")
       fetchEspnGames("wnba", "WNBA"),
       fetchOddsApiGames("baseball_kbo", "KBO"),
       fetchOddsApiGames("baseball_npb", "NPB"),

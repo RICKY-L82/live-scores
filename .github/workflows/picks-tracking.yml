@@ -1,0 +1,53 @@
+name: Track picks history
+
+on:
+  schedule:
+    # 21:00 UTC ~= 05:00 Taiwan next day: after most MLB lines are posted and
+    # before that evening's MLB slate / the next Asian day's KBO+NPB games
+    # start, so record-picks.js captures a realistic "today's upcoming games"
+    # snapshot. Settlement runs first in the same job since by this time
+    # every league's previous games are long finished.
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: picks-tracking
+  cancel-in-progress: false
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Settle pending picks
+        run: node scripts/settle-picks.js
+
+      - name: Record today's picks
+        run: node scripts/record-picks.js
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "picks-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/picks-history data/picks-stats.json
+          if git diff --cached --quiet; then
+            echo "No picks-tracking changes."
+            exit 0
+          fi
+          git commit -m "picks: track $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          git pull --rebase origin main
+          git push origin main
