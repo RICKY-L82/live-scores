@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-19T10:56:55.263Z",
+  "updated": "2026-08-19T21:26:50.883Z",
   "sections": {
     "mlb_fi": {
       "label": "⚾ MLB 首局 NRFI / YRFI",
@@ -21,15 +21,43 @@
     },
     "mlb_ml": {
       "label": "⚾ MLB 獨贏勝率",
-      "day": null,
-      "week": null,
-      "month": null
+      "day": {
+        "date": "2026-08-19",
+        "w": 0,
+        "l": 1
+      },
+      "week": {
+        "from": "2026-08-19",
+        "to": "2026-08-19",
+        "w": 0,
+        "l": 1
+      },
+      "month": {
+        "from": "2026-08-19",
+        "to": "2026-08-19",
+        "w": 0,
+        "l": 1
+      }
     },
     "mlb_ml_edge": {
       "label": "⚾ MLB 獨贏優勢",
-      "day": null,
-      "week": null,
-      "month": null
+      "day": {
+        "date": "2026-08-19",
+        "w": 0,
+        "l": 1
+      },
+      "week": {
+        "from": "2026-08-19",
+        "to": "2026-08-19",
+        "w": 0,
+        "l": 1
+      },
+      "month": {
+        "from": "2026-08-19",
+        "to": "2026-08-19",
+        "w": 0,
+        "l": 1
+      }
     },
     "wnba_ou": {
       "label": "🏀 WNBA 大小分 Over/Under",
