@@ -1,6 +1,6 @@
 {
   "date": "2026-08-20",
-  "recordedAt": "2026-08-20T15:21:22.572Z",
+  "recordedAt": "2026-08-20T15:35:17.577Z",
   "sections": {
     "mlb_fi": [
       {
@@ -11,8 +11,8 @@
         "start": "2026-08-20T22:35:00Z",
         "pick": "NRFI 首局雙方皆不得分",
         "prob": 0.7317213003804056,
-        "edge": 0.16275578313902628,
-        "price": "-132(FanDuel)",
+        "edge": 0.17031779160847582,
+        "price": "-128(FanDuel)",
         "result": null
       },
       {
@@ -35,13 +35,87 @@
         "start": "2026-08-20T18:10:00Z",
         "pick": "YRFI 首局至少一方得分",
         "prob": 0.5401458703820392,
-        "edge": 0.04994979195066668,
-        "price": "104(FanDuel)",
+        "edge": 0.040145870382039206,
+        "price": "100(FanDuel)",
         "result": null
       }
     ],
-    "mlb_ou": [],
-    "mlb_sp": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "Toronto Blue Jays",
+        "home": "Tampa Bay Rays",
+        "start": "2026-08-20T17:10:00Z",
+        "pick": "大分 Over 7",
+        "prob": 0.7617697264418029,
+        "edge": 0.22473268940476576,
+        "price": "-116",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "Athletics",
+        "home": "Kansas City Royals",
+        "start": "2026-08-20T18:10:00Z",
+        "pick": "大分 Over 8",
+        "prob": 0.6633715404851794,
+        "edge": 0.1328551085602968,
+        "price": "-113",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "Seattle Mariners",
+        "home": "Milwaukee Brewers",
+        "start": "2026-08-20T18:10:00Z",
+        "pick": "大分 Over 8",
+        "prob": 0.60009056987619,
+        "edge": 0.09760300768713526,
+        "price": "-101",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Atlanta Braves",
+        "home": "Chicago White Sox",
+        "start": "2026-08-20T18:10:00Z",
+        "pick": "Chicago White Sox +1.5",
+        "prob": 0.7000834778646348,
+        "edge": 0.07045384823500511,
+        "price": "-170",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Washington Nationals",
+        "home": "Texas Rangers",
+        "start": "2026-08-21T00:05:00Z",
+        "pick": "Washington Nationals +1.5",
+        "prob": 0.6375835121105367,
+        "edge": 0.0391899378133479,
+        "price": "-149",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Toronto Blue Jays",
+        "home": "Tampa Bay Rays",
+        "start": "2026-08-20T17:10:00Z",
+        "pick": "Toronto Blue Jays +1.5",
+        "prob": 0.5797214812566744,
+        "edge": -0.020278518743325535,
+        "price": "-150",
+        "result": null
+      }
+    ],
     "mlb_ml": [
       {
         "league": "MLB",
