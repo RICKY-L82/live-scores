@@ -494,6 +494,66 @@
     return map;
   }
 
+  // fallback source for MLB spread/total lines when ESPN's scoreboard odds
+  // come back empty (observed happening reliably from GitHub Actions' IP —
+  // see scripts/record-picks.js — but this also protects real visitors
+  // against any other ESPN hiccup); same map shape as buildEspnSpreadMap/
+  // buildEspnTotMap so collectMlb() doesn't need to know which source won.
+  // Mirrors the totals/spreads parsing collectOddsApiLeague() does for
+  // KBO/NPB, just building lookup maps instead of full candidates.
+  function buildOddsApiTotSpreadMaps(events) {
+    var totMap = {}, spreadMap = {};
+    (events || []).forEach(function (ev) {
+      var key = ev.away_team + "|" + ev.home_team;
+      var books = ev.bookmakers || [];
+      if (books.length < 2) return;
+
+      var totByPoint = {};
+      books.forEach(function (bk) {
+        var mk = (bk.markets || []).find(function (m) { return m.key === "totals"; });
+        if (!mk) return;
+        var ov = mk.outcomes.find(function (o) { return o.name === "Over"; });
+        var un = mk.outcomes.find(function (o) { return o.name === "Under"; });
+        if (!ov || !un || ov.point === undefined) return;
+        var pt = String(ov.point);
+        (totByPoint[pt] = totByPoint[pt] || []).push({ book: bk.title, over: ov.price, under: un.price });
+      });
+      var totLine = mostCommonKey(totByPoint);
+      if (totLine !== null && totByPoint[totLine].length >= 2) {
+        var bestOver = bestAmerican(totByPoint[totLine].map(function (r) { return { price: r.over, book: r.book }; }));
+        var bestUnder = bestAmerican(totByPoint[totLine].map(function (r) { return { price: r.under, book: r.book }; }));
+        if (bestOver && bestUnder) {
+          totMap[key] = { line: Number(totLine), over: String(bestOver.price), under: String(bestUnder.price), real: true };
+        }
+      }
+
+      var spByPoint = {};
+      books.forEach(function (bk) {
+        var mk = (bk.markets || []).find(function (m) { return m.key === "spreads"; });
+        if (!mk) return;
+        var ho = mk.outcomes.find(function (o) { return o.name === ev.home_team; });
+        var ao = mk.outcomes.find(function (o) { return o.name === ev.away_team; });
+        if (!ho || !ao || ho.point === undefined) return;
+        var pt = String(ho.point);
+        (spByPoint[pt] = spByPoint[pt] || []).push({ book: bk.title, homePrice: ho.price, awayPrice: ao.price, awayPoint: ao.point });
+      });
+      var spLine = mostCommonKey(spByPoint);
+      if (spLine !== null && spByPoint[spLine].length >= 2) {
+        var rows = spByPoint[spLine];
+        var bestHomeSp = bestAmerican(rows.map(function (r) { return { price: r.homePrice, book: r.book }; }));
+        var bestAwaySp = bestAmerican(rows.map(function (r) { return { price: r.awayPrice, book: r.book }; }));
+        if (bestHomeSp && bestAwaySp) {
+          var awayLineNum = rows[0].awayPoint !== undefined ? Number(rows[0].awayPoint) : -Number(spLine);
+          spreadMap[key] = {
+            home: { line: Number(spLine), price: String(bestHomeSp.price) },
+            away: { line: awayLineNum, price: String(bestAwaySp.price) },
+          };
+        }
+      }
+    });
+    return { tot: totMap, spread: spreadMap };
+  }
+
   // open -> current shift of the vig-free home probability (percentage points)
   function mlMoveNote(ml, pickIsHome, awayName, homeName) {
     if (!ml.a.open || !ml.h.open) return null;
@@ -1076,7 +1136,24 @@
     var schedP = fetchJson("https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=" + today + "&hydrate=probablePitcher,team");
     var espnP = fetchJson("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=" + today.replace(/-/g, ""))
       .then(function (data) { return { ml: buildEspnMlMap(data), tot: buildEspnTotMap(data), spread: buildEspnSpreadMap(data) }; })
-      .catch(function () { return { ml: {}, tot: {}, spread: {} }; });
+      .catch(function () { return { ml: {}, tot: {}, spread: {} }; })
+      .then(function (espnMaps) {
+        // ESPN's scoreboard is sometimes entirely unreachable (observed
+        // reliably from GitHub Actions' IP, CORS-blocked) or just missing
+        // tot/spread odds for the day; fall back to The Odds API for
+        // whichever of those two came back empty instead of losing 讓分/
+        // 大小分 candidates outright. Only spends Odds API quota when ESPN
+        // actually came up short.
+        if (Object.keys(espnMaps.tot).length && Object.keys(espnMaps.spread).length) return espnMaps;
+        return fetchOddsApiFull("baseball_mlb", "mlbOddsCache").then(function (events) {
+          var fallback = buildOddsApiTotSpreadMaps(events);
+          return {
+            ml: espnMaps.ml,
+            tot: Object.keys(espnMaps.tot).length ? espnMaps.tot : fallback.tot,
+            spread: Object.keys(espnMaps.spread).length ? espnMaps.spread : fallback.spread,
+          };
+        }).catch(function () { return espnMaps; });
+      });
 
     return Promise.all([schedP, fetchMlbStandings(season), espnP, fetchFirstInningRates(), fetchPlaysportMlMap(), fetchBullpenEraMap(season)]).then(function (res) {
       var sched = res[0], standings = res[1], mlMap = res[2].ml, totMap = res[2].tot, spreadMap = res[2].spread, fiRates = res[3], psMap = res[4], bullpenMap = res[5];
@@ -2384,6 +2461,7 @@
         localStorage.removeItem("nrfiOddsCache");
         localStorage.removeItem("kboOddsCache");
         localStorage.removeItem("npbOddsCache");
+        localStorage.removeItem("mlbOddsCache");
       } catch (err) {}
       run();
     });
