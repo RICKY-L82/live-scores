@@ -52,7 +52,48 @@
     return w + "-" + l + " (" + Math.round((w / (w + l)) * 100) + "%)";
   }
 
-  function render(stats) {
+  // Taiwan-date N days from today — matches the date scripts/record-picks.js
+  // files each day's snapshot under
+  function taipeiDateOffset(days) {
+    var d = new Date(Date.now() + days * 86400000);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(d);
+  }
+
+  var RESULT_LABEL = {
+    win: '<span class="pos">✅ 中</span>',
+    loss: '<span class="neg">❌ 摃龜</span>',
+    push: "➖ 走盤",
+    void: "🚫 作廢(延賽等)",
+  };
+  function resultLabel(result) {
+    return RESULT_LABEL[result] || "⏳ 尚未結算";
+  }
+
+  function yesterdayHtml(hist, dateStr) {
+    if (!hist || !hist.sections) {
+      return '<div class="empty-state">' + esc(dateStr) + ' 沒有記錄到任何候選(可能排程尚未執行,或當天各區塊都沒有機率 ≥50% 的候選)。</div>';
+    }
+    var rows = [];
+    Object.keys(SECTION_META).forEach(function (key) {
+      (hist.sections[key] || []).forEach(function (p) {
+        rows.push(
+          "<tr><td>" + SECTION_META[key] + "</td>" +
+          "<td>" + esc(p.away) + " @ " + esc(p.home) + "</td>" +
+          "<td>" + esc(p.pick) + "</td>" +
+          "<td>" + (p.prob * 100).toFixed(1) + "%</td>" +
+          "<td>" + resultLabel(p.result) + "</td></tr>"
+        );
+      });
+    });
+    if (!rows.length) {
+      return '<div class="empty-state">' + esc(dateStr) + ' 沒有記錄到任何候選(可能排程尚未執行,或當天各區塊都沒有機率 ≥50% 的候選)。</div>';
+    }
+    return '<div class="table-wrap">' +
+      '<table class="stat-table"><thead><tr><th>區塊</th><th>對戰</th><th>推薦</th><th>模型機率</th><th>結果</th></tr></thead>' +
+      '<tbody>' + rows.join("") + '</tbody></table></div>';
+  }
+
+  function render(stats, yesterdayHist, yesterdayDate) {
     var el = document.getElementById("winRateContent");
     var rows = Object.keys(SECTION_META).map(function (key) {
       var s = stats && stats.sections && stats.sections[key];
@@ -63,6 +104,10 @@
     }).join("");
 
     el.innerHTML =
+      '<details class="picks-league-section" open>' +
+      '<summary class="picks-league-title">📋 昨日戰績(' + esc(yesterdayDate) + ')</summary>' +
+      '<div class="picks-league-body">' + yesterdayHtml(yesterdayHist, yesterdayDate) + '</div>' +
+      '</details>' +
       '<div class="picks-intro analysis-box"><p>' +
       '每列是「今日推薦 TOP 5」的一個區塊;今日/本週/本月欄位是該區塊記錄的 TOP3 候選(排除模型機率 &lt;50%)已結算賽事的實際勝率,格式為「勝-負 (勝率)」。' +
       '今日 = 最近一個已完全結算的日期(通常是昨天);本週/本月 = 往前推 7 天／30 天內已結算的加總。push/延賽不計入分母。樣本數少於 3 注時顯示「資料累積中」,避免用太小的樣本誤導。' +
@@ -79,12 +124,16 @@
     var el = document.getElementById("winRateContent");
     el.innerHTML = '<div class="detail-loading"><div class="spinner"></div>正在載入歷史勝率資料…</div>';
     document.getElementById("updatedAt").textContent = "載入中…";
-    fetchJson("data/picks-stats.json?t=" + Date.now())
-      .then(function (stats) { render(stats); })
-      .catch(function (err) {
-        el.innerHTML = '<div class="error-state">載入失敗:' + esc(err.message || err) + '</div>';
-        document.getElementById("updatedAt").textContent = "失敗";
-      });
+    var yesterdayDate = taipeiDateOffset(-1);
+    Promise.all([
+      fetchJson("data/picks-stats.json?t=" + Date.now()),
+      fetchJson("data/picks-history/" + yesterdayDate + ".json?t=" + Date.now()).catch(function () { return null; }),
+    ]).then(function (res) {
+      render(res[0], res[1], yesterdayDate);
+    }).catch(function (err) {
+      el.innerHTML = '<div class="error-state">載入失敗:' + esc(err.message || err) + '</div>';
+      document.getElementById("updatedAt").textContent = "失敗";
+    });
   }
 
   document.addEventListener("DOMContentLoaded", function () {
