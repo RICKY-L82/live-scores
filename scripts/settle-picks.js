@@ -283,9 +283,15 @@ function rebuildStats() {
   const now = new Date();
   const monthCutoff = new Date(now.getTime() - 30 * 86400000);
   const weekCutoff = new Date(now.getTime() - 7 * 86400000);
+  // fixed to Taiwan "yesterday" — same date win-rate.html's own 昨日戰績
+  // section always shows, so the two never disagree. (Previously this was
+  // "whichever date most recently had a settled pick," which could silently
+  // drift to *today* once an early game finished, making the day column show
+  // different numbers than the itemized picks directly below it.)
+  const yesterday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" })
+    .format(new Date(now.getTime() - 86400000));
 
-  // per section: rolling week/month win-loss totals, plus the most recent
-  // settled date's own tally for the "day" bucket
+  // per section: rolling week/month win-loss totals, plus yesterday's own tally
   const week = {}, month = {}, dayBucket = {};
   for (const key of Object.keys(SECTION_META)) {
     week[key] = { from: null, to: null, w: 0, l: 0 };
@@ -318,8 +324,7 @@ function rebuildStats() {
         week[key].to = date;
       }
 
-      // most recent settled date (within the month window) becomes the "day" bucket
-      if (!dayBucket[key] || date > dayBucket[key].date) dayBucket[key] = { date, w, l };
+      if (date === yesterday) dayBucket[key] = { date, w, l };
     }
   }
 

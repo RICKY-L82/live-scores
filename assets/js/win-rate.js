@@ -109,11 +109,11 @@
       '<div class="picks-league-body">' + yesterdayHtml(yesterdayHist, yesterdayDate) + '</div>' +
       '</details>' +
       '<div class="picks-intro analysis-box"><p>' +
-      '每列是「今日推薦 TOP 5」的一個區塊;今日/本週/本月欄位是該區塊記錄的 TOP3 候選(排除模型機率 &lt;50%)已結算賽事的實際勝率,格式為「勝-負 (勝率)」。' +
-      '今日 = 最近一個已完全結算的日期(通常是昨天);本週/本月 = 往前推 7 天／30 天內已結算的加總。push/延賽不計入分母。樣本數少於 3 注時顯示「資料累積中」,避免用太小的樣本誤導。' +
+      '每列是「今日推薦 TOP 5」的一個區塊;昨日/本週/本月欄位是該區塊記錄的 TOP3 候選(排除模型機率 &lt;50%)已結算賽事的實際勝率,格式為「勝-負 (勝率)」。' +
+      '昨日欄位跟上方「昨日戰績」是同一天;本週/本月 = 往前推 7 天／30 天內已結算的加總。push/延賽不計入分母。樣本數少於 3 注時顯示「資料累積中」,避免用太小的樣本誤導。' +
       '</p></div>' +
       '<div class="table-wrap">' +
-      '<table class="stat-table"><thead><tr><th>區塊</th><th>今日</th><th>本週</th><th>本月</th></tr></thead>' +
+      '<table class="stat-table"><thead><tr><th>區塊</th><th>昨日</th><th>本週</th><th>本月</th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>';
 
     document.getElementById("updatedAt").textContent =
