@@ -13,7 +13,7 @@
         "prob": 0.7317213003804056,
         "edge": 0.17031779160847582,
         "price": "-128(FanDuel)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -37,7 +37,7 @@
         "prob": 0.5401458703820392,
         "edge": 0.040145870382039206,
         "price": "100(FanDuel)",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_ou": [
@@ -63,7 +63,7 @@
         "prob": 0.6633715404851794,
         "edge": 0.1328551085602968,
         "price": "-113",
-        "result": null
+        "result": "push"
       },
       {
         "league": "MLB",
@@ -75,7 +75,7 @@
         "prob": 0.60009056987619,
         "edge": 0.09760300768713526,
         "price": "-101",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_sp": [
@@ -89,7 +89,7 @@
         "prob": 0.7000834778646348,
         "edge": 0.07045384823500511,
         "price": "-170",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -101,7 +101,7 @@
         "prob": 0.6375835121105367,
         "edge": 0.0391899378133479,
         "price": "-149",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -127,7 +127,7 @@
         "prob": 0.650138613861386,
         "edge": 0.12632909005186221,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -139,7 +139,7 @@
         "prob": 0.6144218077224789,
         "edge": 0.09061228391295506,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -165,7 +165,7 @@
         "prob": 0.650138613861386,
         "edge": 0.12632909005186221,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -177,7 +177,7 @@
         "prob": 0.6144218077224789,
         "edge": 0.09061228391295506,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
