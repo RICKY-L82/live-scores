@@ -23,7 +23,7 @@
       </div>
     </div>
     <div class="header-actions">
-      <span class="updated-at" id="updatedAt">計算中…</span>
+      <span class="updated-at" id="updatedAt">尚未載入</span>
       <button class="icon-btn" id="refreshBtn" title="重新計算" aria-label="重新計算">⟳</button>
       <a class="icon-btn nav-link" href="win-rate.html" title="歷史勝率" aria-label="歷史勝率">🏆</a>
       <a class="icon-btn nav-link" href="line-direction.html" title="盤口方向" aria-label="盤口方向">📈</a>
@@ -32,8 +32,19 @@
   </div>
 </header>
 
+<nav class="toolbar">
+  <div class="toolbar-inner">
+    <div class="league-tabs" id="picksLeagueTabs">
+      <button class="tab" data-league="mlb">⚾ MLB</button>
+      <button class="tab" data-league="wnba">🏀 WNBA</button>
+      <button class="tab" data-league="kbo">🇰🇷 KBO</button>
+      <button class="tab" data-league="npb">🇯🇵 NPB</button>
+    </div>
+  </div>
+</nav>
+
 <main id="picksContent" class="content picks-content">
-  <div class="detail-loading"><div class="spinner"></div>正在抓取賽程、賠率與數據,計算今日勝率最高的五注…</div>
+  <div class="empty-state">選擇上方聯盟以載入今日推薦。預設不主動載入任何聯盟,避免浪費 The Odds API 的每月額度。</div>
 </main>
 
 <footer class="site-footer">
@@ -41,6 +52,6 @@
   <p>模型為戰績/近況/先發投手/首局數據之統計推估,僅供研究參考,不構成投注建議。請遵守所在地法規、理性投注,未滿 18 歲請勿使用。</p>
 </footer>
 
-<script src="assets/js/picks.js?v=23"></script>
+<script src="assets/js/picks.js?v=24"></script>
 </body>
 </html>

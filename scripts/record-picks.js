@@ -60,7 +60,10 @@ function taipeiToday() {
     page.on("console", (msg) => {
       if (msg.type() === "error") console.error("[page]", msg.text());
     });
-    await page.goto("http://127.0.0.1:" + port + "/picks.html", { waitUntil: "load" });
+    // ?auto=1 keeps picks.js's old eager-load-every-league behavior; without
+    // it picks.html now shows league tabs and loads nothing until clicked
+    // (saves The Odds API quota for real visitors — see assets/js/picks.js).
+    await page.goto("http://127.0.0.1:" + port + "/picks.html?auto=1", { waitUntil: "load" });
     await page.waitForFunction(() => window.__picksReady === true, null, { timeout: 90000 });
     sections = await page.evaluate(() => window.__picksSections);
   } finally {

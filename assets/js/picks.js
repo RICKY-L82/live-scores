@@ -2490,8 +2490,202 @@
     });
   }
 
+  // ---------- Tab mode: load one league's picks at a time ----------
+  // run()/render() above load all four leagues on every page visit — that's
+  // what scripts/record-picks.js (Playwright, GitHub Actions) needs for the
+  // daily win-rate tracking, since it just waits for window.__picksReady and
+  // reads window.__picksSections without clicking anything. But a human
+  // visitor usually only cares about one league, and MLB's NRFI fetch alone
+  // is one The Odds API call per game — firing all four leagues' calls on
+  // every cache-miss page load burns quota for leagues nobody looks at. So
+  // the default UI (no ?auto=1) shows league tabs and only calls that
+  // league's collect*() when its tab is actually clicked; record-picks.js
+  // requests picks.html?auto=1 to keep getting the old eager-load-everything
+  // behavior untouched.
+  function slimPicks(list) {
+    return list.map(function (c) {
+      return {
+        type: c.type, league: c.league, away: c.away, home: c.home,
+        start: c.start, pick: c.pick, prob: c.prob, edge: c.edge, price: c.price,
+      };
+    });
+  }
+  function futureOnly(candidates) {
+    var now = Date.now();
+    return (candidates || []).filter(function (c) { return c.start && new Date(c.start).getTime() > now; });
+  }
+  function buildMlbLeagueBlock(rawCandidates) {
+    var candidates = futureOnly(rawCandidates);
+    var byProb = function (a, b) { return b.prob - a.prob; };
+    var byEdge = function (a, b) { return b.edge - a.edge; };
+    var fiAll = candidates.filter(function (c) { return c.type === "nrfi" || c.type === "yrfi"; }).sort(byProb);
+    var fi = fiAll.filter(function (c) { return !c.veto; });
+    var vetoed = fiAll.filter(function (c) { return c.veto; });
+    var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byProb);
+    var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byProb);
+    var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byProb);
+    var mlByEdge = ml.slice().sort(byEdge);
+    var vetoHtml = vetoed.length
+      ? '<details class="veto-block"><summary>🚫 依「直接 PASS」規則(命中 ≥2 項)剔除的 NRFI 場次(' +
+        vetoed.length + '),點開查看檢查表</summary>' +
+        vetoed.map(function (c) { return pickCardHtml(c, "✗"); }).join("") + '</details>'
+      : "";
+    var subHtml =
+      sectionHtml("mlb_fi", "⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
+      vetoHtml +
+      sectionHtml("mlb_ou", "📊 大小分 Over/Under", ou.slice(0, TOP_N), ou.length) +
+      sectionHtml("mlb_sp", "🎯 讓分 Run Line", sp.slice(0, TOP_N), sp.length) +
+      sectionHtml("mlb_ml", "🏆 獨贏勝率", ml.slice(0, TOP_N), ml.length) +
+      sectionHtml("mlb_ml_edge", "🏆 獨贏優勢", mlByEdge.slice(0, TOP_N), mlByEdge.length);
+    return {
+      empty: !fiAll.length && !ml.length && !ou.length && !sp.length,
+      html: leagueSectionHtml("⚾", "MLB", fi.length + ou.length + sp.length + ml.length, subHtml),
+      sections: {
+        mlb_fi: slimPicks(fi), mlb_ou: slimPicks(ou), mlb_sp: slimPicks(sp),
+        mlb_ml: slimPicks(ml), mlb_ml_edge: slimPicks(mlByEdge),
+      },
+    };
+  }
+  function buildWnbaLeagueBlock(rawCandidates) {
+    var candidates = futureOnly(rawCandidates);
+    var byProb = function (a, b) { return b.prob - a.prob; };
+    var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byProb);
+    var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byProb);
+    var subHtml =
+      sectionHtml("wnba_ou", "📊 大小分 Over/Under", ou.slice(0, TOP_N), ou.length) +
+      sectionHtml("wnba_sp", "🎯 讓分 Spread", sp.slice(0, TOP_N), sp.length);
+    return {
+      empty: !ou.length && !sp.length,
+      html: leagueSectionHtml("🏀", "WNBA", ou.length + sp.length, subHtml),
+      sections: { wnba_ou: slimPicks(ou), wnba_sp: slimPicks(sp) },
+    };
+  }
+  function buildOddsLeagueBlock(icon, label, prefix, rawCandidates) {
+    var candidates = futureOnly(rawCandidates);
+    var byProb = function (a, b) { return b.prob - a.prob; };
+    var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byProb);
+    var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byProb);
+    var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byProb);
+    var subHtml =
+      sectionHtml(prefix + "_ml", "🏆 獨贏勝率", ml.slice(0, TOP_N), ml.length) +
+      sectionHtml(prefix + "_ou", "📊 大小分 Over/Under", ou.slice(0, TOP_N), ou.length) +
+      sectionHtml(prefix + "_sp", "🎯 讓分 Run Line", sp.slice(0, TOP_N), sp.length);
+    var sections = {};
+    sections[prefix + "_ml"] = slimPicks(ml);
+    sections[prefix + "_ou"] = slimPicks(ou);
+    sections[prefix + "_sp"] = slimPicks(sp);
+    return {
+      empty: !ml.length && !ou.length && !sp.length,
+      html: leagueSectionHtml(icon, label, ml.length + ou.length + sp.length, subHtml),
+      sections: sections,
+    };
+  }
+  var TAB_LEAGUES = {
+    mlb: { label: "MLB", collect: function () { return collectMlb().catch(function () { return []; }); }, build: buildMlbLeagueBlock },
+    wnba: { label: "WNBA", collect: function () { return collectWnba().catch(function () { return []; }); }, build: buildWnbaLeagueBlock },
+    kbo: {
+      label: "KBO", collect: function () { return collectKbo().catch(function () { return []; }); },
+      build: function (c) { return buildOddsLeagueBlock("🇰🇷", "KBO 韓國職棒", "kbo", c); },
+    },
+    npb: {
+      label: "NPB", collect: function () { return collectNpb().catch(function () { return []; }); },
+      build: function (c) { return buildOddsLeagueBlock("🇯🇵", "NPB 日本職棒", "npb", c); },
+    },
+  };
+  var leagueBlockCache = {};
+  var activeLeagueTab = null;
+
+  function oddsKeyLinkHtml() {
+    var keySet = !!getOddsApiKey();
+    return '<div class="picks-intro analysis-box"><p><a href="#" id="oddsKeyLink">' +
+      (keySet ? "🔑 The Odds API 金鑰已啟用(NRFI/YRFI、KBO、NPB 賠率;點此更換金鑰)"
+              : "🔑 設定免費 The Odds API 金鑰,即可用真實 NRFI/YRFI、KBO、NPB 賠率取代估算") +
+      '</a></p></div>';
+  }
+  function wireOddsKeyLink() {
+    var lk = document.getElementById("oddsKeyLink");
+    if (!lk) return;
+    lk.addEventListener("click", function (e) {
+      e.preventDefault();
+      var k = window.prompt("輸入 The Odds API 金鑰(至 the-odds-api.com 免費註冊;留空清除):", getOddsApiKey());
+      if (k === null) return;
+      try {
+        if (k.trim()) localStorage.setItem("oddsApiKey", k.trim());
+        else localStorage.removeItem("oddsApiKey");
+        localStorage.removeItem("nrfiOddsCache");
+        localStorage.removeItem("kboOddsCache");
+        localStorage.removeItem("npbOddsCache");
+        localStorage.removeItem("mlbOddsCache");
+      } catch (err) {}
+      leagueBlockCache = {};
+      if (activeLeagueTab) loadLeagueTab(activeLeagueTab, true);
+    });
+  }
+  function showTabLoading(label) {
+    document.getElementById("picksContent").innerHTML =
+      oddsKeyLinkHtml() + '<div class="detail-loading"><div class="spinner"></div>正在抓取 ' + esc(label) + ' 賽程、賠率與數據…</div>';
+    wireOddsKeyLink();
+  }
+  function showLeagueBlock(key, block) {
+    document.getElementById("picksContent").innerHTML = oddsKeyLinkHtml() +
+      (block.empty
+        ? '<div class="empty-state">' + esc(TAB_LEAGUES[key].label) + ' 今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。</div>'
+        : block.html);
+    wireOddsKeyLink();
+    document.getElementById("updatedAt").textContent = "計算於 " + new Date().toLocaleTimeString("zh-TW", { hour12: false });
+  }
+  function loadLeagueTab(key, force) {
+    var def = TAB_LEAGUES[key];
+    if (!def) return;
+    activeLeagueTab = key;
+    var tabsEl = document.getElementById("picksLeagueTabs");
+    if (tabsEl) {
+      Array.prototype.forEach.call(tabsEl.querySelectorAll(".tab"), function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-league") === key);
+      });
+    }
+    if (!force && leagueBlockCache[key]) {
+      showLeagueBlock(key, leagueBlockCache[key]);
+      return;
+    }
+    showTabLoading(def.label);
+    document.getElementById("updatedAt").textContent = "計算中…";
+    def.collect().then(function (candidates) {
+      var block = def.build(candidates);
+      leagueBlockCache[key] = block;
+      window.__picksSections = Object.assign({}, window.__picksSections, block.sections);
+      window.__picksReady = true;
+      if (activeLeagueTab === key) showLeagueBlock(key, block);
+    }).catch(function (err) {
+      if (activeLeagueTab === key) {
+        document.getElementById("picksContent").innerHTML =
+          oddsKeyLinkHtml() + '<div class="error-state">計算失敗:' + esc(err.message || err) + '</div>';
+        wireOddsKeyLink();
+      }
+      document.getElementById("updatedAt").textContent = "失敗";
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
-    document.getElementById("refreshBtn").addEventListener("click", run);
-    run();
+    // record-picks.js (Playwright) opens picks.html?auto=1 to keep getting
+    // every league eagerly, matching what it always did before tab mode existed.
+    if (/[?&]auto=1(&|$)/.test(window.location.search)) {
+      document.getElementById("refreshBtn").addEventListener("click", run);
+      run();
+      return;
+    }
+    fetchJson("data/picks-stats.json?t=" + Date.now())
+      .then(function (stats) { picksStats = stats; })
+      .catch(function () {});
+    var tabsEl = document.getElementById("picksLeagueTabs");
+    if (tabsEl) {
+      tabsEl.addEventListener("click", function (e) {
+        var btn = e.target.closest(".tab");
+        if (btn) loadLeagueTab(btn.getAttribute("data-league"));
+      });
+    }
+    document.getElementById("refreshBtn").addEventListener("click", function () {
+      if (activeLeagueTab) loadLeagueTab(activeLeagueTab, true);
+    });
   });
 })();
