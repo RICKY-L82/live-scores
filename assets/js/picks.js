@@ -208,6 +208,7 @@
     function (u) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
     function (u) { return "https://corsproxy.io/?url=" + encodeURIComponent(u); },
     function (u) { return "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u); },
+    function (u) { return "https://proxy.cors.sh/" + u; },
   ];
   var PS_TEAM = {
     "響尾蛇": "Arizona Diamondbacks", "勇士": "Atlanta Braves", "金鶯": "Baltimore Orioles",
