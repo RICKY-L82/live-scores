@@ -1120,6 +1120,420 @@
     return ab > 0 ? { avg: weighted / ab, atBats: ab } : null;
   }
 
+  // ---------- NRFI/YRFI: full parity with picks.js's TOP5 model ----------
+  // The game-detail modal's NRFI/YRFI section used to be a simpler estimate
+  // (team first-inning rates + starter ERA nudge + park/weather) that skipped
+  // three things TOP5 does: shrinkage toward the league mean, the batter-vs-
+  // starter matchup nudge, and real market odds + the 15-item veto checklist.
+  // Ported below so a game's NRFI/YRFI reads identically whether it's found
+  // on TOP5 or by clicking its card here. See picks.js's collectMlb() /
+  // buildChecklist() for the canonical version this mirrors.
+  function rateOf(n, d) { n = Number(n); d = Number(d); return d > 0 && isFinite(n) ? n / d : null; }
+  function ops3(v) { return v === null || v === undefined ? "-" : v.toFixed(3).replace(/^0/, ""); }
+  // shrink a small-sample rate toward a league-wide prior — same as picks.js's shrinkRate
+  function shrinkRate(rate, n, prior, k) {
+    if (rate === null || rate === undefined || prior === null || prior === undefined) return rate;
+    k = k || 8;
+    return (rate * n + prior * k) / (n + k);
+  }
+
+  // league-wide first-inning rates (same 25-day/15-game/min-8 window as
+  // picks.js's fetchFirstInningRates) — needed for shrinkRate's prior, so
+  // this fetches every team at once rather than the two-teams-at-a-time
+  // getTeamFirstInningRates() above; cached 10 min and shared across every
+  // game's modal opened this session.
+  var fiLeagueCache = null;
+  function fetchFirstInningLeagueRates() {
+    if (fiLeagueCache && Date.now() - fiLeagueCache.t < 600000) return Promise.resolve(fiLeagueCache.v);
+    var end = new Date(); end.setDate(end.getDate() - 1);
+    var start = new Date(); start.setDate(start.getDate() - 25);
+    var url = "https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=" + toISODate(start) +
+      "&endDate=" + toISODate(end) + "&hydrate=linescore";
+    return fetchJson(url).then(function (data) {
+      var byTeam = {};
+      (data.dates || []).forEach(function (d) {
+        (d.games || []).forEach(function (g) {
+          if (!(g.status && g.status.abstractGameState === "Final")) return;
+          var inn1 = g.linescore && g.linescore.innings && g.linescore.innings[0];
+          if (!inn1 || !inn1.away || !inn1.home) return;
+          var aRuns = Number(inn1.away.runs) > 0, hRuns = Number(inn1.home.runs) > 0;
+          var aId = g.teams.away.team.id, hId = g.teams.home.team.id;
+          var aScore = Number(g.teams.away.score), hScore = Number(g.teams.home.score);
+          if (!isFinite(aScore) || !isFinite(hScore)) aScore = hScore = null;
+          (byTeam[aId] = byTeam[aId] || []).push({ scored: aRuns, allowed: hRuns, rs: aScore, ra: hScore });
+          (byTeam[hId] = byTeam[hId] || []).push({ scored: hRuns, allowed: aRuns, rs: hScore, ra: aScore });
+        });
+      });
+      var rates = {};
+      Object.keys(byTeam).forEach(function (id) {
+        var games = byTeam[id].slice(-15);
+        if (games.length < 8) return;
+        var off = 0, def = 0, rsSum = 0, raSum = 0, runN = 0;
+        games.forEach(function (g) {
+          if (g.scored) off++;
+          if (g.allowed) def++;
+          if (g.rs !== null) { rsSum += g.rs; raSum += g.ra; runN++; }
+        });
+        rates[id] = {
+          n: games.length, off: off, def: def,
+          offRate: off / games.length, defRate: def / games.length,
+          rsAvg: runN ? rsSum / runN : null,
+          raAvg: runN ? raSum / runN : null,
+        };
+      });
+      var ids = Object.keys(rates);
+      var lo = 0, ldf = 0, lrs = 0, lra = 0, rn = 0;
+      ids.forEach(function (id) {
+        var r = rates[id];
+        lo += r.offRate; ldf += r.defRate;
+        if (r.rsAvg !== null) { lrs += r.rsAvg; lra += r.raAvg; rn++; }
+      });
+      rates._league = ids.length ? {
+        offRate: lo / ids.length, defRate: ldf / ids.length,
+        rsAvg: rn ? lrs / rn : null, raAvg: rn ? lra / rn : null,
+      } : null;
+      fiLeagueCache = { t: Date.now(), v: rates };
+      return rates;
+    }).catch(function () { return {}; });
+  }
+
+  var ops7Cache = {};
+  function fetchTeam7dOps(teamId, season) {
+    if (!teamId) return Promise.resolve(null);
+    if (!ops7Cache[teamId]) {
+      var end = new Date(); end.setDate(end.getDate() - 1);
+      var start = new Date(); start.setDate(start.getDate() - 7);
+      ops7Cache[teamId] = fetchJson("https://statsapi.mlb.com/api/v1/teams/" + teamId +
+          "/stats?stats=byDateRange&group=hitting&startDate=" + toISODate(start) +
+          "&endDate=" + toISODate(end) + "&season=" + season)
+        .then(function (d) {
+          var sp = d.stats && d.stats[0] && d.stats[0].splits && d.stats[0].splits[0];
+          var o = sp && sp.stat ? Number(sp.stat.ops) : NaN;
+          return isFinite(o) ? o : null;
+        })
+        .catch(function () { return null; });
+    }
+    return ops7Cache[teamId];
+  }
+
+  function fetchTop3Hitters(ids) {
+    if (!ids.length) return Promise.resolve({});
+    var base = "https://statsapi.mlb.com/api/v1/people?personIds=" + ids.join(",");
+    return Promise.all([
+      fetchJson(base + "&hydrate=stats(group=[hitting],type=[season])").catch(function () { return null; }),
+      fetchJson(base + "&hydrate=stats(group=[hitting],type=[statSplits],sitCodes=[vl,vr])").catch(function () { return null; }),
+    ]).then(function (r) {
+      var map = {};
+      function ensure(id) { return (map[id] = map[id] || { season: null, vl: null, vr: null }); }
+      if (r[0]) (r[0].people || []).forEach(function (p) {
+        var sp = p.stats && p.stats[0] && p.stats[0].splits && p.stats[0].splits[0];
+        if (sp) ensure(p.id).season = sp.stat;
+      });
+      if (r[1]) (r[1].people || []).forEach(function (p) {
+        ((p.stats && p.stats[0] && p.stats[0].splits) || []).forEach(function (sp) {
+          var c = sp.split && sp.split.code;
+          if (c === "vl") ensure(p.id).vl = sp.stat;
+          else if (c === "vr") ensure(p.id).vr = sp.stat;
+        });
+      });
+      return map;
+    });
+  }
+
+  // ---------- The Odds API: real NRFI/YRFI prices ----------
+  // Same built-in keys as picks.js's TOP5 (shared quota — see picks.js's
+  // fetchOddsApiWithFallback for why three keys). A key set via TOP5's 🔑
+  // link overrides these here too, since both pages read the same
+  // localStorage "oddsApiKey". This is the one piece of the port that spends
+  // live API quota: opening an MLB game's detail now fires one odds call for
+  // that single game (cached 10 min, so re-opening the same game is free).
+  var DEFAULT_ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97"];
+  function getOddsApiKeys() {
+    try {
+      var override = localStorage.getItem("oddsApiKey");
+      return override ? [override] : DEFAULT_ODDS_API_KEYS;
+    } catch (e) { return DEFAULT_ODDS_API_KEYS; }
+  }
+  var oddsApiDeadKeys = {};
+  function fetchOddsApiWithFallback(urlForKey) {
+    var keys = getOddsApiKeys().filter(function (k) { return !oddsApiDeadKeys[k]; });
+    if (!keys.length) keys = getOddsApiKeys();
+    function tryKey(i) {
+      if (i >= keys.length) return Promise.reject(new Error("all Odds API keys exhausted"));
+      return fetchJson(urlForKey(keys[i])).catch(function (err) {
+        var quotaLike = /API (401|429)/.test(String(err && err.message || ""));
+        if (quotaLike) {
+          oddsApiDeadKeys[keys[i]] = true;
+          if (i + 1 < keys.length) return tryKey(i + 1);
+        }
+        throw err;
+      });
+    }
+    return tryKey(0);
+  }
+  var NRFI_PRICE = "-110"; // no market found: assume the common price
+  var nrfiOddsEventsCache = null; // today's baseball_mlb event list (id + team names) — shared across every game opened this session
+  var nrfiOddsGameCache = {}; // "away|home" -> { t, v }
+  function fetchNrfiOddsForGame(awayName, homeName) {
+    var cacheKey = awayName + "|" + homeName;
+    var hit = nrfiOddsGameCache[cacheKey];
+    if (hit && Date.now() - hit.t < 600000) return Promise.resolve(hit.v);
+    var eventsP = (nrfiOddsEventsCache && Date.now() - nrfiOddsEventsCache.t < 600000)
+      ? Promise.resolve(nrfiOddsEventsCache.v)
+      : fetchOddsApiWithFallback(function (key) {
+          return "https://api.the-odds-api.com/v4/sports/baseball_mlb/events?apiKey=" + encodeURIComponent(key);
+        }).then(function (events) {
+          nrfiOddsEventsCache = { t: Date.now(), v: events || [] };
+          return nrfiOddsEventsCache.v;
+        }).catch(function () { return []; });
+    return eventsP.then(function (events) {
+      var ev = events.filter(function (e) { return e.away_team === awayName && e.home_team === homeName; })[0];
+      if (!ev) { nrfiOddsGameCache[cacheKey] = { t: Date.now(), v: null }; return null; }
+      return fetchOddsApiWithFallback(function (key) {
+        return "https://api.the-odds-api.com/v4/sports/baseball_mlb/events/" + ev.id +
+          "/odds?apiKey=" + encodeURIComponent(key) + "&regions=us&markets=totals_1st_1_innings&oddsFormat=american";
+      }).then(function (d) {
+        var found = null, book = null;
+        (d.bookmakers || []).forEach(function (bk) {
+          if (found) return;
+          (bk.markets || []).forEach(function (mk) {
+            if (found || mk.key !== "totals_1st_1_innings") return;
+            var over = null, under = null;
+            (mk.outcomes || []).forEach(function (oc) {
+              if (Number(oc.point) !== 0.5) return;
+              if (oc.name === "Over") over = oc.price;
+              else if (oc.name === "Under") under = oc.price;
+            });
+            if (over !== null && under !== null) { found = { over: String(over), under: String(under) }; book = bk.title; }
+          });
+        });
+        var v = found ? { over: found.over, under: found.under, book: book || "book" } : null;
+        nrfiOddsGameCache[cacheKey] = { t: Date.now(), v: v };
+        return v;
+      }).catch(function () {
+        nrfiOddsGameCache[cacheKey] = { t: Date.now(), v: null };
+        return null;
+      });
+    });
+  }
+
+  // ---------- NRFI 15-item veto checklist (verbatim port of picks.js's buildChecklist/checklistHtml) ----------
+  function buildChecklist(ctx) {
+    var rows = [], gate = [];
+    function addRow(stars, name, weight, value, status, note) {
+      rows.push({ stars: stars, name: name, weight: weight, value: value, status: status, note: note || "" });
+    }
+    var sides = [
+      { tag: "客", pp: ctx.ppA, p1: ctx.aP1 },
+      { tag: "主", pp: ctx.ppH, p1: ctx.hP1 },
+    ];
+    function bothStarters(fn) {
+      var any = false, fail = false;
+      sides.forEach(function (s) {
+        var r = s.p1 ? fn(s.p1) : null;
+        if (r === null || r === undefined) return;
+        any = true;
+        if (!r) fail = true;
+      });
+      return any ? (fail ? "fail" : "pass") : "na";
+    }
+    function i01Ops(st) {
+      if (!st) return null;
+      var o = numOr(st.ops);
+      if (o !== null) return o;
+      var ob = numOr(st.obp), sl = numOr(st.slg);
+      return ob !== null && sl !== null ? ob + sl : null;
+    }
+
+    sides.forEach(function (s) {
+      if (!s.p1) return;
+      var bb = rateOf(s.p1.baseOnBalls, s.p1.battersFaced);
+      if (bb !== null && bb > 0.09) gate.push(s.tag + "隊先發首局 BB% " + (bb * 100).toFixed(1) + "% > 9%");
+      var o = i01Ops(s.p1);
+      if (o !== null && o > 0.78) gate.push(s.tag + "隊先發首局被打 OPS " + ops3(o) + " > .780");
+    });
+    if (!ctx.ppA || !ctx.ppH) gate.push("有球隊未公布正式先發(疑似牛棚車輪戰)");
+
+    function fmt1(st) { return st ? (st.era || "-") + " / " + (st.whip || "-") + " / " + (st.avg || "-") : "無分項"; }
+    addRow("★★★★★", "① 先發首局 ERA / WHIP / 被打擊率", 20,
+      "客 " + esc(fmt1(ctx.aP1)) + ";主 " + esc(fmt1(ctx.hP1)),
+      bothStarters(function (st) {
+        var era = numOr(st.era), whip = numOr(st.whip), avg = numOr(st.avg);
+        if (era === null && whip === null && avg === null) return null;
+        return era !== null && era < 2.5 && whip !== null && whip < 1.1 && avg !== null && avg < 0.22;
+      }),
+      "目標 ERA<2.50、WHIP<1.10、BAA<.220,兩位先發皆須達標");
+
+    function fmt2(st) {
+      var o = i01Ops(st), k = st ? rateOf(st.strikeOuts, st.battersFaced) : null;
+      return o === null ? "無分項" : "OPS " + ops3(o) + (k !== null ? "、K% " + (k * 100).toFixed(0) + "%" : "");
+    }
+    addRow("★★★★★", "② 第一輪打者壓制(以首局分項近似 TTO1)", 15,
+      "客 " + fmt2(ctx.aP1) + ";主 " + fmt2(ctx.hP1),
+      bothStarters(function (st) { var o = i01Ops(st); return o === null ? null : o < 0.65; }),
+      "目標被打 OPS<.650;xwOBA 需 Statcast,無免費來源");
+
+    function fmt3(st) { var b = st ? rateOf(st.baseOnBalls, st.battersFaced) : null; return b === null ? "無分項" : (b * 100).toFixed(1) + "%"; }
+    addRow("★★★★★", "③ 先發首局保送率 BB%", 10,
+      "客 " + fmt3(ctx.aP1) + ";主 " + fmt3(ctx.hP1),
+      bothStarters(function (st) { var b = rateOf(st.baseOnBalls, st.battersFaced); return b === null ? null : b < 0.07; }),
+      "目標 <7%;>9% 列入直接 PASS 條件");
+
+    addRow("★★★★★", "④ Hard Hit%", 10, "—", "na", "需 Statcast(Baseball Savant),免費 API 未提供,不計分");
+    addRow("★★★★★", "⑤ Barrel%", 10, "—", "na", "需 Statcast(Baseball Savant),免費 API 未提供,不計分");
+
+    function top3Avg(ids, key) {
+      var vals = [];
+      (ids || []).forEach(function (id) {
+        var h = ctx.hitters[id];
+        var o = h && h[key] ? numOr(h[key].ops) : null;
+        if (o !== null) vals.push(o);
+      });
+      return vals.length ? vals.reduce(function (a, b) { return a + b; }, 0) / vals.length : null;
+    }
+    function twoTeamStatus(a, h, limit) {
+      if ((a === null || a === undefined) && (h === null || h === undefined)) return "na";
+      return (a !== null && a !== undefined && a >= limit) || (h !== null && h !== undefined && h >= limit) ? "fail" : "pass";
+    }
+    var a6 = top3Avg(ctx.box.awayTop3, "season"), h6 = top3Avg(ctx.box.homeTop3, "season");
+    addRow("★★★★", "⑥ 前三棒 OPS(打線公布後,球季值近似)", 10,
+      a6 === null && h6 === null ? "打線未公布" : "客 " + ops3(a6) + ";主 " + ops3(h6),
+      twoTeamStatus(a6, h6, 0.85),
+      "≥.850 視為危險;近 15 場逐場資料無免費來源,以球季值近似");
+    if (a6 !== null && a6 > 0.9) gate.push("客隊前三棒 OPS " + ops3(a6) + " > .900");
+    if (h6 !== null && h6 > 0.9) gate.push("主隊前三棒 OPS " + ops3(h6) + " > .900");
+
+    var aKey = ctx.hHand === "L" ? "vl" : ctx.hHand === "R" ? "vr" : null;
+    var hKey = ctx.aHand === "L" ? "vl" : ctx.aHand === "R" ? "vr" : null;
+    var a7 = aKey ? top3Avg(ctx.box.awayTop3, aKey) : null;
+    var h7 = hKey ? top3Avg(ctx.box.homeTop3, hKey) : null;
+    addRow("★★★★", "⑦ 前三棒對今日先發左右投 OPS", 5,
+      a7 === null && h7 === null
+        ? (a6 === null && h6 === null ? "打線未公布" : "無左右投分項")
+        : "客 vs" + (ctx.hHand || "?") + " " + ops3(a7) + ";主 vs" + (ctx.aHand || "?") + " " + ops3(h7),
+      twoTeamStatus(a7, h7, 0.85), "≥.850 視為危險");
+
+    addRow("★★★★", "⑧ 近 15 場首局得分率", 5,
+      "客 " + Math.round(ctx.aFi.offRate * 100) + "%;主 " + Math.round(ctx.hFi.offRate * 100) + "%",
+      ctx.aFi.offRate < 0.35 && ctx.hFi.offRate < 0.35 ? "pass" : "fail", "兩隊皆 <35% 為佳");
+    addRow("★★★★", "⑨ 近 15 場首局失分率", 5,
+      "客 " + Math.round(ctx.aFi.defRate * 100) + "%;主 " + Math.round(ctx.hFi.defRate * 100) + "%",
+      ctx.aFi.defRate < 0.35 && ctx.hFi.defRate < 0.35 ? "pass" : "fail", "兩隊皆 <35% 為佳");
+
+    var o7a = ctx.ops7.away, o7h = ctx.ops7.home;
+    addRow("★★★★", "⑩ 近 7 天團隊 OPS", 5,
+      (o7a === null || o7a === undefined) && (o7h === null || o7h === undefined)
+        ? "無資料" : "客 " + ops3(o7a) + ";主 " + ops3(o7h),
+      twoTeamStatus(o7a, o7h, 0.78), "≥.780 代表打線火熱;>.850 列入直接 PASS 條件");
+    if (o7a !== null && o7a !== undefined && o7a > 0.85) gate.push("客隊近 7 天 OPS " + ops3(o7a) + " > .850");
+    if (o7h !== null && o7h !== undefined && o7h > 0.85) gate.push("主隊近 7 天 OPS " + ops3(o7h) + " > .850");
+
+    var park = ctx.venue || "";
+    var parkLean = YRFI_PARKS.indexOf(park) !== -1 ? "yrfi" : NRFI_PARKS.indexOf(park) !== -1 ? "nrfi" : "mid";
+    addRow("★★★", "⑪ 球場", 2,
+      esc(park || "-") + (parkLean === "yrfi" ? "(打者友善)" : parkLean === "nrfi" ? "(投手友善)" : "(中性)"),
+      park ? (parkLean === "yrfi" ? "fail" : "pass") : "na",
+      "Coors/大美國/洋基偏 YRFI;Petco/Oracle/T-Mobile 偏 NRFI");
+    if (park === "Coors Field") gate.push("球場為 Coors Field");
+
+    var w = ctx.weather, wind = w ? parseWind(w.wind) : null;
+    if (!w || (!w.temp && !w.wind)) {
+      addRow("★★★", "⑫ 天氣(溫度/風向/風速)", 1, "尚未提供", "na", "臨近開賽才會有資料");
+    } else {
+      var temp = numOr(w.temp);
+      var hot = temp !== null && temp >= 95;
+      var windOut = wind && wind.mph !== null && wind.mph > 12 && wind.out;
+      addRow("★★★", "⑫ 天氣(溫度/風向/風速)", 1,
+        esc((w.condition ? w.condition + "、" : "") + (w.temp ? w.temp + "°F、" : "") + (w.wind || "")),
+        hot || windOut ? "fail" : "pass", "≥95°F 或風速 >12mph 吹向外野視為 YRFI 助力");
+      if (windOut) gate.push("風速 " + wind.mph + " mph 且吹向外野");
+    }
+
+    addRow("★★★", "⑬ 主審", 1, ctx.box.umpire ? esc(ctx.box.umpire) : "未公布", "na",
+      "好球帶傾向無免費數據源,僅列名供人工查證,不計分");
+    addRow("★★★", "⑭ NRFI 盤口", 1,
+      ctx.nrOdds
+        ? esc("NRFI(Under)" + ctx.nrOdds.under + " / YRFI(Over)" + ctx.nrOdds.over + "(" + ctx.nrOdds.book + ")")
+        : "—",
+      "na",
+      ctx.nrOdds ? "已取得即時賠率;開盤至今的變動歷史無免費來源,不計分"
+                 : "免費賠率源無 NRFI 盤;可於 TOP5 頁首設定 The Odds API 金鑰取得,不計分");
+    addRow("★★★", "⑮ 先發打線", 0,
+      ctx.box.awayTop3.length || ctx.box.homeTop3.length ? "已公布(見⑥⑦)" : "未公布(開賽前 1–3 小時)",
+      "na", "新人/輪休異動需人工判斷,不計分");
+
+    var passW = 0, evalW = 0;
+    rows.forEach(function (r) {
+      if (r.status === "pass") { passW += r.weight; evalW += r.weight; }
+      else if (r.status === "fail") evalW += r.weight;
+    });
+    return {
+      rows: rows,
+      score: evalW > 0 ? Math.round((passW / evalW) * 100) : null,
+      evalW: evalW,
+      gate: gate,
+    };
+  }
+
+  function checklistHtml(cl) {
+    var icon = { pass: ["✓ 通過", "ok"], fail: ["✗ 未過", "bad"], na: ["—", "na"] };
+    var trs = cl.rows.map(function (r) {
+      var ic = icon[r.status];
+      return '<tr><td class="cl-stars">' + r.stars + '</td>' +
+        '<td>' + r.name + (r.note ? '<div class="cl-note">' + r.note + '</div>' : '') + '</td>' +
+        '<td>' + r.value + '</td>' +
+        '<td class="cl-status ' + ic[1] + '">' + ic[0] + '</td></tr>';
+    }).join("");
+    return '<details class="pick-checklist" open><summary>📋 NRFI 15 項進階檢查表' +
+      (cl.score !== null ? ' · NRFI 友善度 <b>' + cl.score + '</b>/100(可評估權重 ' + cl.evalW + '%)' : '') +
+      (cl.gate.length ? ' · <span class="cl-gate-tag">⚠ 直接 PASS 條件 ' + cl.gate.length + ' 項</span>' : '') +
+      '</summary>' +
+      '<div class="table-wrap cl-wrap"><table class="cl-table">' +
+      '<tr><th>權重</th><th>檢查項</th><th>本場數值</th><th>判定</th></tr>' + trs + '</table></div>' +
+      (cl.gate.length
+        ? '<p class="cl-gate">🚫 直接 PASS 條件命中:' + cl.gate.join(";") + "。" +
+          (cl.gate.length >= 2 ? "已達 2 項門檻,依規則不下 NRFI。" : "未達 2 項門檻。") + '</p>'
+        : '') +
+      '</details>';
+  }
+
+  function halfKellyStr(prob, american) {
+    var o = Number(String(american || "").replace(/^\+/, ""));
+    if (isNaN(o) || o === 0) return null;
+    var b = o > 0 ? o / 100 : 100 / (-o);
+    var kelly = (b * prob - (1 - prob)) / b;
+    if (kelly <= 0) return null;
+    return (kelly / 2 * 100).toFixed(1) + "%";
+  }
+  // same visual card TOP5 uses for a pick (pick-card/.pick-top/.pick-nums/…
+  // are shared site-wide via style.css) — reused as-is so a game's NRFI/YRFI
+  // looks identical whether it's seen on TOP5 or here
+  function nrfiPickCardHtml(c, badge) {
+    var kelly = halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
+    var weakTag = c.edge < 0.01 ? '<span class="pick-weak">優勢有限</span>' : "";
+    return (
+      '<div class="pick-card">' +
+        '<div class="pick-rank">' + badge + '</div>' +
+        '<div class="pick-main">' +
+          '<div class="pick-top">' +
+            '<span class="pick-type ' + c.type + '">' + (c.type === "nrfi" ? "首局 NRFI" : "首局 YRFI") + '</span>' +
+            '<span class="pick-league">MLB</span>' +
+            weakTag +
+          '</div>' +
+          '<div class="pick-bet">🎯 <b>' + esc(c.pick) + '</b><span class="pick-price">' + esc(c.price) + '</span></div>' +
+          '<div class="pick-nums">' +
+            '<span>模型機率 <b>' + pctStr(c.prob) + '</b></span>' +
+            '<span>市場損益兩平 <b>' + pctStr(c.market) + '</b></span>' +
+            '<span class="' + (c.edge >= 0 ? "pos" : "neg") + '">優勢 <b>' + (c.edge >= 0 ? "+" : "") + (c.edge * 100).toFixed(1) + '%</b></span>' +
+            (kelly ? '<span>半凱利注碼 <b>' + kelly + '</b></span>' : "") +
+          '</div>' +
+          '<ul class="pick-reasons">' + c.reasons.map(function (r) { return "<li>" + r + "</li>"; }).join("") + '</ul>' +
+          checklistHtml(c.checklist) +
+        '</div>' +
+      '</div>'
+    );
+  }
+
   // ---------- MLB detail ----------
   function renderMlbDetail(game, body) {
     return fetchJson("https://statsapi.mlb.com/api/v1.1/game/" + game.gamePk + "/feed/live").then(function (f) {
@@ -1431,12 +1845,12 @@
       return (bo && bo.length >= 3) ? bo.slice(0, 3) : [];
     }
     var awayTop3 = top3("away"), homeTop3 = top3("home");
+    var season = new Date().getFullYear();
 
     return Promise.all([
       getMlbForm(),
       Promise.all(statFetches),
-      getTeamFirstInningRates(awayTeamId),
-      getTeamFirstInningRates(homeTeamId),
+      fetchFirstInningLeagueRates(), // replaces the two getTeamFirstInningRates() calls — same shape, plus the league-wide _league prior shrinkRate needs
       getPitcherFirstInningSplit(pp.away && pp.away.id),
       getPitcherFirstInningSplit(pp.home && pp.home.id),
       getBullpenEraMap(),
@@ -1445,19 +1859,28 @@
       fetchPitcherVsTeam(pp.home && pp.home.id, awayTeamId), // home starter's career line vs away team
       fetchHittersVsPitcher(homeTop3, pp.away && pp.away.id), // home hitters vs away starter
       fetchHittersVsPitcher(awayTop3, pp.home && pp.home.id), // away hitters vs home starter
+      fetchTeam7dOps(awayTeamId, season),
+      fetchTeam7dOps(homeTeamId, season),
+      fetchTop3Hitters(awayTop3.concat(homeTop3)),
+      fetchNrfiOddsForGame(gd.teams && gd.teams.away && gd.teams.away.name, gd.teams && gd.teams.home && gd.teams.home.name),
     ]).then(function (results) {
       var formMap = results[0];
-      var awayFi = results[2], homeFi = results[3];
-      var awayP1 = results[4], homeP1 = results[5];
-      var bullpenMap = results[6], dynLeagueEra = results[7];
-      var homeOff = combineMatchup(results[8], results[10]);
-      var awayOff = combineMatchup(results[9], results[11]);
+      var fiRates = results[2];
+      var awayFi = fiRates[awayTeamId], homeFi = fiRates[homeTeamId], fiLeague = fiRates._league;
+      var awayP1 = results[3], homeP1 = results[4];
+      var bullpenMap = results[5], dynLeagueEra = results[6];
+      var homeOff = combineMatchup(results[7], results[9]);
+      var awayOff = combineMatchup(results[8], results[10]);
+      var o7a = results[11], o7h = results[12];
+      var top3Hitters = results[13];
+      var nrOdds = results[14];
       var statsById = {};
       results[1].forEach(function (r) {
         if (r && r.people && r.people[0]) {
           var person = r.people[0];
           var splits = person.stats && person.stats[0] && person.stats[0].splits;
           statsById[person.id] = (splits && splits[0] && splits[0].stat) || {};
+          statsById[person.id]._hand = person.pitchHand ? person.pitchHand.code : null;
         }
       });
 
@@ -1558,81 +1981,125 @@
           '<div class="detail-note">分析為根據球隊戰績與投手數據之簡易推估,僅供參考。</div>');
       }
 
-      // first-inning (NRFI/YRFI) analysis
-      var nrfiProb = null;
-      if (awayFi || homeFi) {
+      // first-inning (NRFI/YRFI) analysis — same shrinkage + matchup nudge +
+      // real market odds + 15-item veto checklist as picks.js's TOP5 (see
+      // collectMlb()/buildChecklist() above); only shown when both teams
+      // clear picks.js's own >=8-game sample floor, same as TOP5.
+      var venueName = gd.venue && gd.venue.name;
+      if (awayFi && homeFi) {
         var inner = "";
-        var pA, pH;
-        // blend each offense's 1st-inning scoring rate with the opponent's 1st-inning concede rate
-        if (awayFi && homeFi) {
-          pA = (awayFi.offRate + homeFi.defRate) / 2;
-          pH = (homeFi.offRate + awayFi.defRate) / 2;
-        } else if (awayFi) { pA = awayFi.offRate; pH = awayFi.defRate; }
-        else { pA = homeFi.defRate; pH = homeFi.offRate; }
-        var nrfi = (1 - pA) * (1 - pH) * 100;
-        // starters with extreme first-inning ERA nudge the estimate — same
-        // rule as picks.js (needs >= 8 first innings pitched, else too noisy)
-        var p1Adj = {};
-        [[pp.away, awayP1], [pp.home, homeP1]].forEach(function (pair) {
-          var p = pair[0], st = pair[1];
-          if (!p || !st || !st.era) return;
-          var era = Number(st.era), ip = Number(st.inningsPitched);
-          if (!isFinite(era) || !isFinite(ip) || ip < 8) return;
-          if (era <= 2.0) { nrfi += 3; p1Adj[p.id] = "+3%"; }
-          else if (era >= 6.0) { nrfi -= 3; p1Adj[p.id] = "−3%"; }
-        });
-        var venueName = gd.venue && gd.venue.name;
-        var parkFiAdjPct = parkFirstInningAdj(venueName) * 100;
-        var weatherFiAdjPct = weatherFirstInningAdj(gd.weather) * 100;
-        nrfi += parkFiAdjPct + weatherFiAdjPct;
-        nrfi = clampNum(nrfi, 5, 95);
-        nrfiProb = nrfi / 100;
-        inner += probBarHtml("YRFI 首局有得分", "NRFI 首局無得分", 100 - nrfi, nrfi);
+        var aOffM = shrinkRate(awayFi.offRate, awayFi.n, fiLeague && fiLeague.offRate);
+        var hDefM = shrinkRate(homeFi.defRate, homeFi.n, fiLeague && fiLeague.defRate);
+        var hOffM = shrinkRate(homeFi.offRate, homeFi.n, fiLeague && fiLeague.offRate);
+        var aDefM = shrinkRate(awayFi.defRate, awayFi.n, fiLeague && fiLeague.defRate);
+        var pA = (aOffM + hDefM) / 2;
+        var pH = (hOffM + aDefM) / 2;
+        var nrfi = (1 - pA) * (1 - pH);
+        inner += probBarHtml("YRFI 首局有得分", "NRFI 首局無得分", (1 - nrfi) * 100, nrfi * 100);
 
         var fiRows = "";
         function fiRow(name, fi) {
-          if (!fi) return "";
           return '<tr><td>' + esc(name) + '</td>' +
             '<td>' + fi.off + ' / ' + fi.n + '(' + Math.round(fi.offRate * 100) + '%)</td>' +
             '<td>' + fi.def + ' / ' + fi.n + '(' + Math.round(fi.defRate * 100) + '%)</td></tr>';
         }
         fiRows += fiRow(game.away.name, awayFi) + fiRow(game.home.name, homeFi);
-        var nGames = (awayFi || homeFi).n;
-        if (fiRows) {
-          inner += '<div class="table-wrap" style="margin-top:10px"><table class="stat-table" style="min-width:320px">' +
-            '<tr><th>近 ' + nGames + ' 場</th><th>首局有得分</th><th>首局有失分</th></tr>' + fiRows + '</table></div>';
-        }
+        var nGames = awayFi.n;
+        inner += '<div class="table-wrap" style="margin-top:10px"><table class="stat-table" style="min-width:320px">' +
+          '<tr><th>近 ' + nGames + ' 場</th><th>首局有得分</th><th>首局有失分</th></tr>' + fiRows + '</table></div>';
 
-        var fiNotes = [];
-        function p1Note(p, st) {
+        var reasonsFi = [
+          "客隊近 " + awayFi.n + " 場首局得分 " + awayFi.off + " 次(" + Math.round(awayFi.offRate * 100) +
+            "%),主隊首局失分 " + homeFi.def + " 次(" + Math.round(homeFi.defRate * 100) + "%)。",
+          "主隊近 " + homeFi.n + " 場首局得分 " + homeFi.off + " 次(" + Math.round(homeFi.offRate * 100) +
+            "%),客隊首局失分 " + awayFi.def + " 次(" + Math.round(awayFi.defRate * 100) + "%)。",
+        ];
+        // starters with extreme first-inning ERA nudge the estimate — same
+        // rule as picks.js (needs >= 8 first innings pitched, else too noisy)
+        [[pp.away, "客", awayP1], [pp.home, "主", homeP1]].forEach(function (t) {
+          var p = t[0], tag = t[1], st = t[2];
           if (!p || !st || !st.era) return;
-          var seasonSt = statsById[p.id] || {};
-          var line = esc(p.fullName) + " 首局 ERA <b>" + esc(st.era) + "</b>(共 " + esc(st.inningsPitched || "-") + " 局,WHIP " + esc(st.whip || "-") + ")";
-          var sEra = seasonSt.era ? Number(seasonSt.era) : null;
-          var fEra = Number(st.era);
-          if (sEra !== null && !isNaN(fEra)) {
-            var diff = fEra - sEra;
-            if (diff > 0.75) line += ",明顯高於其球季 ERA " + esc(seasonSt.era) + ",開局偏不穩";
-            else if (diff < -0.75) line += ",低於其球季 ERA " + esc(seasonSt.era) + ",開局表現穩健";
-            else line += ",與其球季 ERA " + esc(seasonSt.era) + " 相近";
+          var era = Number(st.era), ip = Number(st.inningsPitched);
+          if (!isFinite(era)) return;
+          if (!isFinite(ip) || ip < 8) {
+            reasonsFi.push(tag + "隊先發 " + esc(p.fullName) + " 首局 ERA " + esc(st.era) + "(僅 " + esc(st.inningsPitched || "-") + " 局,樣本不足不列入調整)。");
+            return;
           }
-          if (p1Adj[p.id]) line += "(已計入 NRFI " + p1Adj[p.id] + " 調整)";
-          else if (!isNaN(fEra) && (fEra <= 2.0 || fEra >= 6.0)) line += "(首局樣本不足 8 局,不列入機率調整)";
-          fiNotes.push("<p>" + line + "。</p>");
+          if (era <= 2.0) { nrfi += 0.03; reasonsFi.push(tag + "隊先發 " + esc(p.fullName) + " 首局 ERA 僅 " + esc(st.era) + "(" + esc(st.inningsPitched) + " 局),開局壓制力強(NRFI +3%)。"); }
+          else if (era >= 6.0) { nrfi -= 0.03; reasonsFi.push(tag + "隊先發 " + esc(p.fullName) + " 首局 ERA 高達 " + esc(st.era) + "(" + esc(st.inningsPitched) + " 局),開局明顯不穩(NRFI −3%)。"); }
+          else reasonsFi.push(tag + "隊先發 " + esc(p.fullName) + " 首局 ERA " + esc(st.era) + "。");
+        });
+        var parkFiAdj = parkFirstInningAdj(venueName);
+        var weatherFiAdj = weatherFirstInningAdj(gd.weather);
+        if (parkFiAdj) {
+          nrfi += parkFiAdj;
+          reasonsFi.push("球場「" + esc(venueName) + "」" + (parkFiAdj < 0 ? "偏打者向" : "偏投手向") +
+            "(NRFI " + (parkFiAdj >= 0 ? "+" : "") + (parkFiAdj * 100).toFixed(1) + "%)。");
         }
-        p1Note(pp.away, awayP1);
-        p1Note(pp.home, homeP1);
-        if (parkFiAdjPct) {
-          fiNotes.push("<p>球場「" + esc(venueName) + "」" + (parkFiAdjPct < 0 ? "偏打者向" : "偏投手向") +
-            "(NRFI " + (parkFiAdjPct >= 0 ? "+" : "") + parkFiAdjPct.toFixed(1) + "%)。</p>");
+        if (weatherFiAdj) {
+          nrfi += weatherFiAdj;
+          reasonsFi.push((weatherFiAdj < 0 ? "天氣條件(高溫或強風吹向外野)對進攻有利" : "強風吹向內野抑制打擊") +
+            "(NRFI " + (weatherFiAdj >= 0 ? "+" : "") + (weatherFiAdj * 100).toFixed(1) + "%)。");
         }
-        if (weatherFiAdjPct) {
-          fiNotes.push("<p>" + (weatherFiAdjPct < 0 ? "天氣條件(高溫或強風吹向外野)對進攻有利" : "強風吹向內野抑制打擊") +
-            "(NRFI " + (weatherFiAdjPct >= 0 ? "+" : "") + weatherFiAdjPct.toFixed(1) + "%)。</p>");
+        if (pp.away && pp.home && (homeOff || awayOff)) {
+          var fiMatchupParts = [];
+          if (homeOff) fiMatchupParts.push("主隊打線對客隊先發 " + esc(pp.away.fullName) + " 生涯合計打擊率 " + ops3(homeOff.avg));
+          if (awayOff) fiMatchupParts.push("客隊打線對主隊先發 " + esc(pp.home.fullName) + " 生涯合計打擊率 " + ops3(awayOff.avg));
+          var fiMatchupSignal = (homeOff ? homeOff.avg - LEAGUE_AVG_BA : 0) + (awayOff ? awayOff.avg - LEAGUE_AVG_BA : 0);
+          var fiMatchupAdj = clampNum(fiMatchupSignal * -0.4, -0.03, 0.03);
+          reasonsFi.push("先發對戰數據:" + fiMatchupParts.join(";") +
+            (fiMatchupAdj ? "(NRFI " + (fiMatchupAdj >= 0 ? "+" : "") + (fiMatchupAdj * 100).toFixed(1) + "%,非首局專屬數據,僅輕度調整)" : "") + "。");
+          nrfi += fiMatchupAdj;
         }
-        fiNotes.push('<p>綜合兩隊近況估算,本場 <b>NRFI(首局雙方皆未得分)機率約 ' + Math.round(nrfi) + '%</b>。</p>');
-        inner += '<div class="analysis-box" style="margin-top:10px">' + fiNotes.join("") + '</div>' +
-          '<div class="detail-note">依兩隊近 ' + nGames + ' 場首局得失分與先發投手首局分項數據之簡易估算,僅供參考。</div>';
+        nrfi = clampNum(nrfi, 0.05, 0.95);
+
+        var pickNrfi, prob2, beNr, priceLabel;
+        if (nrOdds) {
+          pickNrfi = nrfi >= 0.5;
+          prob2 = pickNrfi ? nrfi : 1 - nrfi;
+          beNr = pickNrfi ? impliedProb(nrOdds.under) : impliedProb(nrOdds.over);
+          priceLabel = (pickNrfi ? nrOdds.under : nrOdds.over) + "(" + nrOdds.book + ")";
+          reasonsFi.push("實際賠率(" + esc(nrOdds.book) + "):NRFI(Under 0.5)" + esc(nrOdds.under) +
+            " / YRFI(Over 0.5)" + esc(nrOdds.over) + ",取模型機率較高的一邊。");
+        } else {
+          pickNrfi = nrfi >= 0.5;
+          prob2 = pickNrfi ? nrfi : 1 - nrfi;
+          beNr = impliedProb(NRFI_PRICE);
+          priceLabel = NRFI_PRICE + "(參考)";
+        }
+        reasonsFi.push("估計 " + (pickNrfi ? "NRFI" : "YRFI") + " 機率 <b>" + pctStr(prob2) +
+          "</b>,以 " + esc(priceLabel) + " 計損益兩平為 " + pctStr(beNr) +
+          ",優勢 <b>" + ((prob2 - beNr) >= 0 ? "+" : "") + ((prob2 - beNr) * 100).toFixed(1) + "%</b>。");
+
+        var officials = ld.boxscore && ld.boxscore.officials;
+        var ump = null;
+        if (officials) {
+          var hp = officials.filter(function (o) { return o.officialType === "Home Plate" && o.official; })[0];
+          ump = hp ? hp.official.fullName : null;
+        }
+        var cl = buildChecklist({
+          ppA: pp.away, ppH: pp.home,
+          aP1: awayP1, hP1: homeP1,
+          aHand: (pp.away && statsById[pp.away.id]) ? statsById[pp.away.id]._hand : null,
+          hHand: (pp.home && statsById[pp.home.id]) ? statsById[pp.home.id]._hand : null,
+          aFi: awayFi, hFi: homeFi,
+          venue: venueName,
+          weather: gd.weather,
+          box: { awayTop3: awayTop3, homeTop3: homeTop3, umpire: ump },
+          ops7: { away: o7a, home: o7h },
+          hitters: top3Hitters,
+          nrOdds: nrOdds,
+        });
+        var veto = pickNrfi && cl.gate.length >= 2;
+        if (veto) reasonsFi.push("⚠ 檢查表「直接 PASS」條件命中 " + cl.gate.length + " 項,依規則不下 NRFI,已自排行剔除。");
+        else if (!pickNrfi && cl.gate.length) reasonsFi.push("檢查表 PASS 條件命中 " + cl.gate.length + " 項(對 NRFI 不利),與 YRFI 方向一致。");
+
+        inner += nrfiPickCardHtml({
+          type: pickNrfi ? "nrfi" : "yrfi",
+          pick: pickNrfi ? "NRFI 首局雙方皆不得分" : "YRFI 首局至少一方得分",
+          price: priceLabel, prob: prob2, market: beNr, edge: prob2 - beNr,
+          reasons: reasonsFi, checklist: cl,
+        }, veto ? "✗" : "🎯");
 
         html += sectionBlock("首局得失分分析(NRFI / YRFI)", inner);
       }
