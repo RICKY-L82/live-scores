@@ -1,0 +1,131 @@
+{
+  "date": "2026-08-25",
+  "recordedAt": "2026-08-24T21:17:01.773Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Minnesota Twins",
+        "home": "Athletics",
+        "start": "2026-08-25T01:40:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.5921083712572055,
+        "edge": 0.06829884744768167,
+        "price": "-110(參考)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "nrfi",
+        "away": "Boston Red Sox",
+        "home": "Miami Marlins",
+        "start": "2026-08-24T22:40:00Z",
+        "pick": "NRFI 首局雙方皆不得分",
+        "prob": 0.5726993582113935,
+        "edge": 0.04888983440186967,
+        "price": "-110(參考)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Chicago Cubs",
+        "home": "Arizona Diamondbacks",
+        "start": "2026-08-25T01:40:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.5658500221708791,
+        "edge": 0.04204049836135526,
+        "price": "-110(參考)",
+        "result": null
+      }
+    ],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Cincinnati Reds",
+        "home": "San Francisco Giants",
+        "start": "2026-08-25T01:45:00Z",
+        "pick": "Cincinnati Reds 客勝",
+        "prob": 0.6716049255441008,
+        "edge": 0.14779540173457695,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Cleveland Guardians",
+        "home": "Los Angeles Angels",
+        "start": "2026-08-25T01:38:00Z",
+        "pick": "Cleveland Guardians 客勝",
+        "prob": 0.6428428382367912,
+        "edge": 0.11903331442726739,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Detroit Tigers",
+        "start": "2026-08-24T22:40:00Z",
+        "pick": "Tampa Bay Rays 客勝",
+        "prob": 0.6416545061587962,
+        "edge": 0.11784498234927232,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Cincinnati Reds",
+        "home": "San Francisco Giants",
+        "start": "2026-08-25T01:45:00Z",
+        "pick": "Cincinnati Reds 客勝",
+        "prob": 0.6716049255441008,
+        "edge": 0.14779540173457695,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Cleveland Guardians",
+        "home": "Los Angeles Angels",
+        "start": "2026-08-25T01:38:00Z",
+        "pick": "Cleveland Guardians 客勝",
+        "prob": 0.6428428382367912,
+        "edge": 0.11903331442726739,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Detroit Tigers",
+        "start": "2026-08-24T22:40:00Z",
+        "pick": "Tampa Bay Rays 客勝",
+        "prob": 0.6416545061587962,
+        "edge": 0.11784498234927232,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
