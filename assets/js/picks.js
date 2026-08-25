@@ -1748,8 +1748,13 @@
     if (!getOddsApiKeys().length) return Promise.resolve([]);
     var cache = null;
     try { cache = JSON.parse(localStorage.getItem(cacheKey)); } catch (e) {}
-    if (cache && cache.t && Date.now() - cache.t < 3 * 3600 * 1000 && cache.data) {
-      return Promise.resolve(cache.data);
+    if (cache && cache.t && cache.data) {
+      // Empty results get a short TTL: bookmakers often haven't posted
+      // KBO/NPB lines yet when checked early in the day (Taiwan afternoon),
+      // so a full 3h cache of "no games" would keep hiding lines that show
+      // up later even after they're posted.
+      var ttl = cache.data.length ? 3 * 3600 * 1000 : 30 * 60 * 1000;
+      if (Date.now() - cache.t < ttl) return Promise.resolve(cache.data);
     }
     return fetchOddsApiWithFallback(function (key) {
       return "https://api.the-odds-api.com/v4/sports/" + sportKey +
