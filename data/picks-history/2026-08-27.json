@@ -1,0 +1,59 @@
+{
+  "date": "2026-08-27",
+  "recordedAt": "2026-08-27T00:18:39.338Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Minnesota Twins",
+        "home": "Athletics",
+        "start": "2026-08-27T01:05:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.5971259165908189,
+        "edge": 0.07331639278129509,
+        "price": "-110(參考)",
+        "result": null
+      }
+    ],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Minnesota Twins",
+        "home": "Athletics",
+        "start": "2026-08-27T01:05:00Z",
+        "pick": "Minnesota Twins 客勝",
+        "prob": 0.5398027522935779,
+        "edge": -0.001260049638789229,
+        "price": "-128(運彩換算)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Minnesota Twins",
+        "home": "Athletics",
+        "start": "2026-08-27T01:05:00Z",
+        "pick": "Minnesota Twins 客勝",
+        "prob": 0.5398027522935779,
+        "edge": -0.001260049638789229,
+        "price": "-128(運彩換算)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
