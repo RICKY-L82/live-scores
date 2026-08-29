@@ -29,7 +29,7 @@ const SETTLE_BUFFER_MS = 4 * 3600000;   // wait this long after start before che
 const VOID_AFTER_MS = 3 * 86400000;     // give up (mark void) if still unresolved after this long
 const KEEP_MS = 35 * 86400000;          // prune history files older than this
 
-const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97"];
+const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97", "b998595122a6efd15f322466e21ee2b5"];
 
 const SECTION_META = {
   mlb_fi: "⚾ MLB 首局 NRFI / YRFI", mlb_ou: "⚾ MLB 大小分 Over/Under", mlb_sp: "⚾ MLB 讓分 Run Line",

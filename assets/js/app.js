@@ -1247,7 +1247,7 @@
   // localStorage "oddsApiKey". This is the one piece of the port that spends
   // live API quota: opening an MLB game's detail now fires one odds call for
   // that single game (cached 10 min, so re-opening the same game is free).
-  var DEFAULT_ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97"];
+  var DEFAULT_ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97", "b998595122a6efd15f322466e21ee2b5"];
   function getOddsApiKeys() {
     try {
       var override = localStorage.getItem("oddsApiKey");

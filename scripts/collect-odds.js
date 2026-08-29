@@ -45,7 +45,7 @@ const MAX_SNAPS = 300;        // hard cap per event
 // cheapest one — 1 credit/call vs 3 for h2h+spreads+totals) since a 讓分/
 // 大小分走勢 signal isn't worth risking the shared quota for.
 // same keys assets/js/picks.js falls back between; already public in client JS
-const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97"];
+const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97", "b998595122a6efd15f322466e21ee2b5"];
 const ODDS_API_LEAGUES = { kbo: "baseball_kbo", npb: "baseball_npb" };
 const ODDS_API_MIN_INTERVAL_MS = 4 * 3600000; // 4h → ~360 credits/month for these two leagues combined
 
