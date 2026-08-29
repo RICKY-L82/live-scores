@@ -1,0 +1,131 @@
+{
+  "date": "2026-08-26",
+  "recordedAt": "2026-08-25T21:15:40.904Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Minnesota Twins",
+        "home": "Athletics",
+        "start": "2026-08-26T01:40:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.6207416929216552,
+        "edge": 0.09693216911213132,
+        "price": "-110(參考)",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Texas Rangers",
+        "home": "Chicago White Sox",
+        "start": "2026-08-25T23:40:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.5616039487502626,
+        "edge": 0.03779442494073881,
+        "price": "-110(參考)",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Baltimore Orioles",
+        "home": "St. Louis Cardinals",
+        "start": "2026-08-25T23:45:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.5397675278302878,
+        "edge": 0.01595800402076397,
+        "price": "-110(參考)",
+        "result": "loss"
+      }
+    ],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Detroit Tigers",
+        "start": "2026-08-25T22:40:00Z",
+        "pick": "Tampa Bay Rays 客勝",
+        "prob": 0.6935958529688973,
+        "edge": 0.16978632915937342,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Los Angeles Dodgers",
+        "home": "Atlanta Braves",
+        "start": "2026-08-25T23:15:00Z",
+        "pick": "Los Angeles Dodgers 客勝",
+        "prob": 0.6373146556567741,
+        "edge": 0.1135051318472503,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Minnesota Twins",
+        "home": "Athletics",
+        "start": "2026-08-26T01:40:00Z",
+        "pick": "Minnesota Twins 客勝",
+        "prob": 0.6265298999507954,
+        "edge": 0.10272037614127161,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Detroit Tigers",
+        "start": "2026-08-25T22:40:00Z",
+        "pick": "Tampa Bay Rays 客勝",
+        "prob": 0.6935958529688973,
+        "edge": 0.16978632915937342,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Los Angeles Dodgers",
+        "home": "Atlanta Braves",
+        "start": "2026-08-25T23:15:00Z",
+        "pick": "Los Angeles Dodgers 客勝",
+        "prob": 0.6373146556567741,
+        "edge": 0.1135051318472503,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Minnesota Twins",
+        "home": "Athletics",
+        "start": "2026-08-26T01:40:00Z",
+        "pick": "Minnesota Twins 客勝",
+        "prob": 0.6265298999507954,
+        "edge": 0.10272037614127161,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
