@@ -13,7 +13,7 @@
         "prob": 0.603047436346239,
         "edge": 0.0725310044213564,
         "price": "-113(FanDuel)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -25,7 +25,7 @@
         "prob": 0.5265429858339752,
         "edge": -0.01474141783574956,
         "price": "-118(FanDuel)",
-        "result": null
+        "result": "loss"
       }
     ],
     "mlb_ou": [
@@ -39,7 +39,7 @@
         "prob": 0.5806294834015251,
         "edge": 0.08801864596310144,
         "price": "103",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -51,7 +51,7 @@
         "prob": 0.5726497602097473,
         "edge": 0.060454638258527815,
         "price": "-105",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -63,7 +63,7 @@
         "prob": 0.544056768941469,
         "edge": 0.031861646990249515,
         "price": "-105",
-        "result": null
+        "result": "loss"
       }
     ],
     "mlb_sp": [
@@ -77,7 +77,7 @@
         "prob": 0.5420766163511805,
         "edge": 0.04207661635118054,
         "price": "100",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -89,7 +89,7 @@
         "prob": 0.5198065943838843,
         "edge": -0.08956840561611568,
         "price": "-156",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -101,7 +101,7 @@
         "prob": 0.5093200830879105,
         "edge": -0.0319643205818142,
         "price": "-118",
-        "result": null
+        "result": "loss"
       }
     ],
     "mlb_ml": [
@@ -115,7 +115,7 @@
         "prob": 0.6752667568350884,
         "edge": 0.15145723302556457,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -127,7 +127,7 @@
         "prob": 0.6389183564567769,
         "edge": 0.11510883264725302,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -139,7 +139,7 @@
         "prob": 0.6275886621315192,
         "edge": 0.10377913832199537,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_ml_edge": [
@@ -153,7 +153,7 @@
         "prob": 0.6752667568350884,
         "edge": 0.15145723302556457,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -165,7 +165,7 @@
         "prob": 0.6389183564567769,
         "edge": 0.11510883264725302,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -177,7 +177,7 @@
         "prob": 0.6275886621315192,
         "edge": 0.10377913832199537,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       }
     ],
     "wnba_ou": [],

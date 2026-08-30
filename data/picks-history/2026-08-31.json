@@ -1,0 +1,72 @@
+{
+  "date": "2026-08-31",
+  "recordedAt": "2026-08-30T22:58:28.360Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "Cincinnati Reds",
+        "home": "Chicago Cubs",
+        "start": "2026-08-30T23:20:00Z",
+        "pick": "大分 Over 9",
+        "prob": 0.6230445619217879,
+        "edge": 0.10381379269101865,
+        "price": "-108",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Cincinnati Reds",
+        "home": "Chicago Cubs",
+        "start": "2026-08-30T23:20:00Z",
+        "pick": "Cincinnati Reds +1.5",
+        "prob": 0.6151483394017367,
+        "edge": 0.026670973146592725,
+        "price": "-143",
+        "result": null
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Cincinnati Reds",
+        "home": "Chicago Cubs",
+        "start": "2026-08-30T23:20:00Z",
+        "pick": "Chicago Cubs 主勝",
+        "prob": 0.5223587012253923,
+        "edge": -0.05448170715719769,
+        "price": "-152(運彩換算)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Cincinnati Reds",
+        "home": "Chicago Cubs",
+        "start": "2026-08-30T23:20:00Z",
+        "pick": "Chicago Cubs 主勝",
+        "prob": 0.5223587012253923,
+        "edge": -0.05448170715719769,
+        "price": "-152(運彩換算)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
