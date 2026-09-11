@@ -138,6 +138,28 @@
   function pctStr(p) { return (p * 100).toFixed(1) + "%"; }
   function clampNum(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
+  // Poisson pmf for k = 0..n, and a comparison of two independent Poisson
+  // run counts (mirrors assets/js/picks.js's comparePoisson, used for the
+  // "首局勝負預測" first-inning-winner model below)
+  function poissonPmfArray(lambda, n) {
+    var arr = [Math.exp(-lambda)];
+    for (var k = 1; k <= n; k++) arr.push(arr[k - 1] * lambda / k);
+    return arr;
+  }
+  function comparePoisson(lambdaA, lambdaB) {
+    var N = 10;
+    var pmfA = poissonPmfArray(lambdaA, N), pmfB = poissonPmfArray(lambdaB, N);
+    var aWin = 0, bWin = 0, tie = 0;
+    for (var i = 0; i <= N; i++) {
+      for (var j = 0; j <= N; j++) {
+        var p = pmfA[i] * pmfB[j];
+        if (i > j) aWin += p; else if (i < j) bWin += p; else tie += p;
+      }
+    }
+    var total = aWin + bWin + tie;
+    return { a: aWin / total, b: bWin / total, tie: tie / total };
+  }
+
   // ---------- game-total (大小分) model — mirrors assets/js/picks.js ----------
   // expected total runs: each side = (own runs scored + opponent runs allowed)/2,
   // nudged by each starter's season ERA vs the ~4.20 league average, plus
@@ -1510,11 +1532,12 @@
   // looks identical whether it's seen on TOP5 or here
   var NRFI_CARD_TYPE_LABEL = {
     nrfi: "首局 NRFI", yrfi: "首局 YRFI",
-    p1nrfi: "先發ERA NRFI", p1yrfi: "先發ERA YRFI",
+    p1nrfi: "先發ERA NRFI", p1yrfi: "先發ERA YRFI", fiw: "首局勝負",
   };
   function nrfiPickCardHtml(c, badge) {
-    var kelly = halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
-    var weakTag = c.edge < 0.01 ? '<span class="pick-weak">優勢有限</span>' : "";
+    var kelly = c.noMarket ? null : halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
+    var weakTag = !c.noMarket && c.edge < 0.01 ? '<span class="pick-weak">優勢有限</span>' : "";
+    var noMarketTag = c.noMarket ? '<span class="pick-weak">無公開賠率,模型預測</span>' : "";
     return (
       '<div class="pick-card">' +
         '<div class="pick-rank">' + badge + '</div>' +
@@ -1522,13 +1545,18 @@
           '<div class="pick-top">' +
             '<span class="pick-type ' + c.type + '">' + NRFI_CARD_TYPE_LABEL[c.type] + '</span>' +
             '<span class="pick-league">MLB</span>' +
-            weakTag +
+            weakTag + noMarketTag +
           '</div>' +
-          '<div class="pick-bet">🎯 <b>' + esc(c.pick) + '</b><span class="pick-price">' + esc(c.price) + '</span></div>' +
+          '<div class="pick-bet">🎯 <b>' + esc(c.pick) + '</b><span class="pick-price">' + (c.noMarket ? "模型推算" : esc(c.price)) + '</span></div>' +
           '<div class="pick-nums">' +
             '<span>模型機率 <b>' + pctStr(c.prob) + '</b></span>' +
-            '<span>市場損益兩平 <b>' + pctStr(c.market) + '</b></span>' +
-            '<span class="' + (c.edge >= 0 ? "pos" : "neg") + '">優勢 <b>' + (c.edge >= 0 ? "+" : "") + (c.edge * 100).toFixed(1) + '%</b></span>' +
+            (c.noMarket
+              ? (typeof c.tieProb === "number"
+                  ? '<span>首局平手機率 <b>' + pctStr(c.tieProb) + '</b></span>'
+                  : '<span>中性基準 <b>50.0%</b></span>')
+              : '<span>市場損益兩平 <b>' + pctStr(c.market) + '</b></span>') +
+            '<span class="' + (c.edge >= 0 ? "pos" : "neg") + '">' + (c.noMarket ? "信心度" : "優勢") + ' <b>' +
+              (c.edge >= 0 ? "+" : "") + (c.edge * 100).toFixed(1) + '%</b></span>' +
             (kelly ? '<span>半凱利注碼 <b>' + kelly + '</b></span>' : "") +
           '</div>' +
           '<ul class="pick-reasons">' + c.reasons.map(function (r) { return "<li>" + r + "</li>"; }).join("") + '</ul>' +
@@ -2150,6 +2178,32 @@
             reasons: reasonsP1,
           }, "🎯");
           html += sectionBlock("先發首局 ERA 對決", p1Inner);
+
+          // 首局勝負預測 — 同一組首局 ERA 數據的另一種用法:不是問「首局
+          // 會不會有人得分」,而是把兩邊首局預期得分(對方先發的首局 ERA)
+          // 當卜瓦松分布,模擬比較客隊/主隊誰在首局搶分機率較高。無對應
+          // 公開盤口,純模型預測(noMarket),同 TOP5 頁 picks.js 的 mlb_fiw。
+          var lambdaAwayRuns = hP1Era / 9, lambdaHomeRuns = aP1Era / 9;
+          var winCmp = comparePoisson(lambdaAwayRuns, lambdaHomeRuns);
+          var pickAwayWin = winCmp.a >= winCmp.b;
+          var probWin = pickAwayWin ? winCmp.a : winCmp.b;
+          var otherWin = pickAwayWin ? winCmp.b : winCmp.a;
+          var reasonsWin = [
+            "客隊先發 " + esc(pp.away.fullName) + " 首局 ERA " + esc(awayP1.era) + "(" + esc(awayP1.inningsPitched) +
+              " 局),換算主隊首局預期得分 " + lambdaHomeRuns.toFixed(2) + " 分。",
+            "主隊先發 " + esc(pp.home.fullName) + " 首局 ERA " + esc(homeP1.era) + "(" + esc(homeP1.inningsPitched) +
+              " 局),換算客隊首局預期得分 " + lambdaAwayRuns.toFixed(2) + " 分。",
+            "以卜瓦松分布模擬雙方首局得分:客隊首局得分較多機率 " + pctStr(winCmp.a) +
+              ",主隊首局得分較多機率 " + pctStr(winCmp.b) + ",首局平手(含 0-0)機率 " + pctStr(winCmp.tie) + "。",
+            (pickAwayWin ? "客隊" : "主隊") + "首局得分機率較高,建議方向:買" + (pickAwayWin ? "客隊" : "主隊") + "首局搶分。",
+          ];
+          var fiwInner = nrfiPickCardHtml({
+            type: "fiw",
+            pick: pickAwayWin ? (game.away.name + " 客隊首局搶分") : (game.home.name + " 主隊首局搶分"),
+            price: "", prob: probWin, market: otherWin, edge: probWin - otherWin,
+            reasons: reasonsWin, noMarket: true, tieProb: winCmp.tie,
+          }, "🎯");
+          html += sectionBlock("首局勝負預測", fiwInner);
         }
       }
 

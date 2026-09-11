@@ -19,6 +19,7 @@
   var SECTION_META = {
     mlb_fi: "⚾ MLB 首局 NRFI / YRFI",
     mlb_p1era: "⚾ MLB 先發首局 ERA 對決",
+    mlb_fiw: "⚾ MLB 首局勝負預測",
     mlb_ou: "⚾ MLB 大小分 Over/Under",
     mlb_sp: "⚾ MLB 讓分 Run Line",
     mlb_ml: "⚾ MLB 獨贏勝率",
@@ -75,6 +76,32 @@
   }
   function pctStr(p) { return (p * 100).toFixed(1) + "%"; }
   function clampNum(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  // Poisson pmf for k = 0..n via the standard recurrence pmf[k] = pmf[k-1] * lambda / k
+  function poissonPmfArray(lambda, n) {
+    var arr = [Math.exp(-lambda)];
+    for (var k = 1; k <= n; k++) arr.push(arr[k - 1] * lambda / k);
+    return arr;
+  }
+  // compares two independent Poisson-distributed run counts (e.g. each
+  // team's expected 1st-inning runs off the opposing starter) and returns
+  // the probability A scores more (a), B scores more (b), or they tie (tie,
+  // dominated by the common 0-0 case) — a discrete Skellam-style comparison,
+  // capped at 10 runs/side since the tail beyond that is negligible for any
+  // realistic single-inning lambda
+  function comparePoisson(lambdaA, lambdaB) {
+    var N = 10;
+    var pmfA = poissonPmfArray(lambdaA, N), pmfB = poissonPmfArray(lambdaB, N);
+    var aWin = 0, bWin = 0, tie = 0;
+    for (var i = 0; i <= N; i++) {
+      for (var j = 0; j <= N; j++) {
+        var p = pmfA[i] * pmfB[j];
+        if (i > j) aWin += p; else if (i < j) bWin += p; else tie += p;
+      }
+    }
+    var total = aWin + bWin + tie;
+    return { a: aWin / total, b: bWin / total, tie: tie / total };
+  }
 
   // vig-free probabilities from a two-way moneyline
   function fairProbs(mlA, mlH) {
@@ -1484,6 +1511,40 @@
                 edge: probP1 - beNrP1,
                 reasons: reasonsP1,
               }));
+
+              // -- 首局勝負(先發 ERA 版)--
+              // Not "will anyone score" (NRFI/YRFI above) but "who outscores
+              // whom in the 1st inning": away hitters face the home starter
+              // (hP1Era → away's expected 1st-inning runs), home hitters face
+              // the away starter (aP1Era → home's expected 1st-inning runs).
+              // No 1st-inning-winner market exists in the free odds feed, so
+              // this is presented as a pure model read (noMarket), same as
+              // TOP5's ml fallback when odds aren't posted yet.
+              var lambdaAwayRuns = hP1Era / 9, lambdaHomeRuns = aP1Era / 9;
+              var winCmp = comparePoisson(lambdaAwayRuns, lambdaHomeRuns);
+              var pickAwayWin = winCmp.a >= winCmp.b;
+              var probWin = pickAwayWin ? winCmp.a : winCmp.b;
+              var otherWin = pickAwayWin ? winCmp.b : winCmp.a;
+              var reasonsWin = [
+                "客隊先發 " + esc(ppA.fullName) + " 首局 ERA " + esc(aP1.era) + "(" + esc(aP1.inningsPitched) +
+                  " 局),換算主隊首局預期得分 " + lambdaHomeRuns.toFixed(2) + " 分。",
+                "主隊先發 " + esc(ppH.fullName) + " 首局 ERA " + esc(hP1.era) + "(" + esc(hP1.inningsPitched) +
+                  " 局),換算客隊首局預期得分 " + lambdaAwayRuns.toFixed(2) + " 分。",
+                "以卜瓦松分布模擬雙方首局得分:客隊首局得分較多機率 " + pctStr(winCmp.a) +
+                  ",主隊首局得分較多機率 " + pctStr(winCmp.b) + ",首局平手(含 0-0)機率 " + pctStr(winCmp.tie) + "。",
+                (pickAwayWin ? "客隊" : "主隊") + "首局得分機率較高,建議方向:買" + (pickAwayWin ? "客隊" : "主隊") + "首局搶分。",
+              ];
+              candidates.push(Object.assign({}, base, {
+                type: "fiw",
+                pick: pickAwayWin ? (away.name + " 客隊首局搶分") : (home.name + " 主隊首局搶分"),
+                price: "",
+                prob: probWin,
+                market: otherWin,
+                edge: probWin - otherWin,
+                reasons: reasonsWin,
+                noMarket: true,
+                tieProb: winCmp.tie,
+              }));
             }
           }
 
@@ -2340,7 +2401,7 @@
   // ---------- render ----------
   var TYPE_LABEL = {
     ml: "獨贏", nrfi: "首局 NRFI", yrfi: "首局 YRFI",
-    p1nrfi: "先發ERA NRFI", p1yrfi: "先發ERA YRFI",
+    p1nrfi: "先發ERA NRFI", p1yrfi: "先發ERA YRFI", fiw: "首局勝負",
     over: "大分", under: "小分", spread: "讓分",
   };
 
@@ -2363,7 +2424,9 @@
           '<div class="pick-nums">' +
             '<span>模型機率 <b>' + pctStr(c.prob) + '</b></span>' +
             (c.noMarket
-              ? '<span>中性基準 <b>50.0%</b></span>'
+              ? (typeof c.tieProb === "number"
+                  ? '<span>首局平手機率 <b>' + pctStr(c.tieProb) + '</b></span>'
+                  : '<span>中性基準 <b>50.0%</b></span>')
               : '<span>市場損益兩平 <b>' + pctStr(c.market) + '</b></span>') +
             '<span class="' + (c.edge >= 0 ? "pos" : "neg") + '">' + (c.noMarket ? "信心度" : "優勢") + ' <b>' +
               (c.edge >= 0 ? "+" : "") + (c.edge * 100).toFixed(1) + '%</b></span>' +
@@ -2423,6 +2486,7 @@
     var fi = fiAll.filter(function (c) { return !c.veto; });
     var vetoed = fiAll.filter(function (c) { return c.veto; });
     var fiP1 = candidates.filter(function (c) { return c.type === "p1nrfi" || c.type === "p1yrfi"; }).sort(byProb);
+    var fiw = candidates.filter(function (c) { return c.type === "fiw"; }).sort(byEdge);
     var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byProb);
     var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byProb);
     var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byProb);
@@ -2440,10 +2504,10 @@
     var spNpb = sp.filter(function (c) { return c.league === "NPB"; });
     var mlNpb = ml.filter(function (c) { return c.league === "NPB"; });
 
-    if (!fiAll.length && !fiP1.length && !ml.length && !ou.length && !sp.length) {
+    if (!fiAll.length && !fiP1.length && !fiw.length && !ml.length && !ou.length && !sp.length) {
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
       window.__picksSections = {
-        mlb_fi: [], mlb_p1era: [], mlb_ou: [], mlb_sp: [], mlb_ml: [], mlb_ml_edge: [],
+        mlb_fi: [], mlb_p1era: [], mlb_fiw: [], mlb_ou: [], mlb_sp: [], mlb_ml: [], mlb_ml_edge: [],
         wnba_ou: [], wnba_sp: [], nba_ml: [],
         kbo_ml: [], kbo_ou: [], kbo_sp: [], npb_ml: [], npb_ou: [], npb_sp: [],
       };
@@ -2460,6 +2524,7 @@
       sectionHtml("mlb_fi", "⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
       vetoHtml +
       sectionHtml("mlb_p1era", "🎯 先發首局 ERA 對決", fiP1.slice(0, TOP_N), fiP1.length) +
+      sectionHtml("mlb_fiw", "🥇 首局勝負預測", fiw.slice(0, TOP_N), fiw.length) +
       sectionHtml("mlb_ou", "📊 大小分 Over/Under", ouMlb.slice(0, TOP_N), ouMlb.length) +
       sectionHtml("mlb_sp", "🎯 讓分 Run Line", spMlb.slice(0, TOP_N), spMlb.length) +
       sectionHtml("mlb_ml", "🏆 獨贏勝率", mlMlb.slice(0, TOP_N), mlMlb.length) +
@@ -2491,7 +2556,7 @@
       });
     }
     window.__picksSections = {
-      mlb_fi: slim(fi), mlb_p1era: slim(fiP1), mlb_ou: slim(ouMlb), mlb_sp: slim(spMlb),
+      mlb_fi: slim(fi), mlb_p1era: slim(fiP1), mlb_fiw: slim(fiw), mlb_ou: slim(ouMlb), mlb_sp: slim(spMlb),
       mlb_ml: slim(mlMlb), mlb_ml_edge: slim(mlMlbByEdge),
       wnba_ou: slim(ouWnba), wnba_sp: slim(spWnba),
       nba_ml: slim(mlNba),
@@ -2500,7 +2565,7 @@
     };
     window.__picksReady = true;
     var mainHtml =
-      leagueSectionHtml("⚾", "MLB", fi.length + fiP1.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
+      leagueSectionHtml("⚾", "MLB", fi.length + fiP1.length + fiw.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
       leagueSectionHtml("🏀", "WNBA", ouWnba.length + spWnba.length, wnbaSubHtml) +
       // leagueSectionHtml("🏀", "NBA", mlNba.length, nbaSubHtml) + // NBA temporarily disabled
       leagueSectionHtml("🇰🇷", "KBO 韓國職棒", mlKbo.length + ouKbo.length + spKbo.length, kboSubHtml) +
@@ -2511,6 +2576,7 @@
       '各依「模型機率」(勝率)由高至低取前 ' + TOP_N + ' 名;MLB 另外多一個「獨贏優勢」子區塊,同樣是獨贏候選,改依「模型機率 − 市場損益兩平機率」的優勢由高至低取前 ' + TOP_N + ' 名。' +
       '每張 NRFI/YRFI 卡附 15 項進階檢查表;「直接 PASS」條件命中 2 項以上的 NRFI 一律剔除。' +
       'MLB 再多一個獨立的「先發首局 ERA 對決」子區塊:不看球隊近況、球場或天氣,純粹取兩位先發投手各自的「首局 ERA」split(至少需 8 局首局樣本),以卜瓦松近似 P(單局不失分)=e^(−首局ERA/9) 相乘估計 NRFI 機率,是與上方複合模型互相佐證的另一個角度。' +
+      '「首局勝負預測」則是同一組首局 ERA 數據的另一種用法:不是問「首局會不會有人得分」,而是把兩邊首局預期得分(對方先發的首局 ERA)當成卜瓦松分布,模擬比較客隊/主隊誰在首局搶分機率較高,建議買分數較可能領先的一邊;此區無對應公開盤口,純模型預測,不計半凱利注碼。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
       'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯)、主場球場修正(靜態表,依 2024 全壘打 park factor 估計)、以及當日主場高溫預報修正(Open-Meteo,僅溫度,無球場座向資料故不做風向修正)。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
@@ -2590,6 +2656,7 @@
     var fi = fiAll.filter(function (c) { return !c.veto; });
     var vetoed = fiAll.filter(function (c) { return c.veto; });
     var fiP1 = candidates.filter(function (c) { return c.type === "p1nrfi" || c.type === "p1yrfi"; }).sort(byProb);
+    var fiw = candidates.filter(function (c) { return c.type === "fiw"; }).sort(byEdge);
     var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byProb);
     var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byProb);
     var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byProb);
@@ -2603,15 +2670,16 @@
       sectionHtml("mlb_fi", "⚾ 首局 NRFI / YRFI", fi.slice(0, TOP_N), fi.length) +
       vetoHtml +
       sectionHtml("mlb_p1era", "🎯 先發首局 ERA 對決", fiP1.slice(0, TOP_N), fiP1.length) +
+      sectionHtml("mlb_fiw", "🥇 首局勝負預測", fiw.slice(0, TOP_N), fiw.length) +
       sectionHtml("mlb_ou", "📊 大小分 Over/Under", ou.slice(0, TOP_N), ou.length) +
       sectionHtml("mlb_sp", "🎯 讓分 Run Line", sp.slice(0, TOP_N), sp.length) +
       sectionHtml("mlb_ml", "🏆 獨贏勝率", ml.slice(0, TOP_N), ml.length) +
       sectionHtml("mlb_ml_edge", "🏆 獨贏優勢", mlByEdge.slice(0, TOP_N), mlByEdge.length);
     return {
-      empty: !fiAll.length && !fiP1.length && !ml.length && !ou.length && !sp.length,
-      html: leagueSectionHtml("⚾", "MLB", fi.length + fiP1.length + ou.length + sp.length + ml.length, subHtml),
+      empty: !fiAll.length && !fiP1.length && !fiw.length && !ml.length && !ou.length && !sp.length,
+      html: leagueSectionHtml("⚾", "MLB", fi.length + fiP1.length + fiw.length + ou.length + sp.length + ml.length, subHtml),
       sections: {
-        mlb_fi: slimPicks(fi), mlb_p1era: slimPicks(fiP1), mlb_ou: slimPicks(ou), mlb_sp: slimPicks(sp),
+        mlb_fi: slimPicks(fi), mlb_p1era: slimPicks(fiP1), mlb_fiw: slimPicks(fiw), mlb_ou: slimPicks(ou), mlb_sp: slimPicks(sp),
         mlb_ml: slimPicks(ml), mlb_ml_edge: slimPicks(mlByEdge),
       },
     };
