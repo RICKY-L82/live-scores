@@ -32,7 +32,8 @@ const KEEP_MS = 35 * 86400000;          // prune history files older than this
 const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97", "b998595122a6efd15f322466e21ee2b5"];
 
 const SECTION_META = {
-  mlb_fi: "⚾ MLB 首局 NRFI / YRFI", mlb_ou: "⚾ MLB 大小分 Over/Under", mlb_sp: "⚾ MLB 讓分 Run Line",
+  mlb_fi: "⚾ MLB 首局 NRFI / YRFI", mlb_p1era: "⚾ MLB 先發首局 ERA 對決",
+  mlb_ou: "⚾ MLB 大小分 Over/Under", mlb_sp: "⚾ MLB 讓分 Run Line",
   mlb_ml: "⚾ MLB 獨贏勝率", mlb_ml_edge: "⚾ MLB 獨贏優勢",
   wnba_ou: "🏀 WNBA 大小分 Over/Under", wnba_sp: "🏀 WNBA 讓分 Spread",
   nba_ml: "🏀 NBA 獨贏勝率",
@@ -94,7 +95,7 @@ function settleTotal(pick, total) {
 }
 function settleFi(pick, inning1Total) {
   const scored = inning1Total > 0;
-  return (pick.type === "yrfi") === scored ? "win" : "loss";
+  return (pick.type === "yrfi" || pick.type === "p1yrfi") === scored ? "win" : "loss";
 }
 
 // ---------- MLB (statsapi) ----------
@@ -129,7 +130,7 @@ async function settleMlbPick(pick) {
   if (pick.type === "ml") return settleMl(pick, game.awayScore, game.homeScore);
   if (pick.type === "spread") return settleSpread(pick, game.awayScore, game.homeScore);
   if (pick.type === "over" || pick.type === "under") return settleTotal(pick, game.awayScore + game.homeScore);
-  if (pick.type === "nrfi" || pick.type === "yrfi") {
+  if (pick.type === "nrfi" || pick.type === "yrfi" || pick.type === "p1nrfi" || pick.type === "p1yrfi") {
     if (game.inning1Total === null) return null;
     return settleFi(pick, game.inning1Total);
   }

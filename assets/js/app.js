@@ -1508,6 +1508,10 @@
   // same visual card TOP5 uses for a pick (pick-card/.pick-top/.pick-nums/…
   // are shared site-wide via style.css) — reused as-is so a game's NRFI/YRFI
   // looks identical whether it's seen on TOP5 or here
+  var NRFI_CARD_TYPE_LABEL = {
+    nrfi: "首局 NRFI", yrfi: "首局 YRFI",
+    p1nrfi: "先發ERA NRFI", p1yrfi: "先發ERA YRFI",
+  };
   function nrfiPickCardHtml(c, badge) {
     var kelly = halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
     var weakTag = c.edge < 0.01 ? '<span class="pick-weak">優勢有限</span>' : "";
@@ -1516,7 +1520,7 @@
         '<div class="pick-rank">' + badge + '</div>' +
         '<div class="pick-main">' +
           '<div class="pick-top">' +
-            '<span class="pick-type ' + c.type + '">' + (c.type === "nrfi" ? "首局 NRFI" : "首局 YRFI") + '</span>' +
+            '<span class="pick-type ' + c.type + '">' + NRFI_CARD_TYPE_LABEL[c.type] + '</span>' +
             '<span class="pick-league">MLB</span>' +
             weakTag +
           '</div>' +
@@ -1528,7 +1532,7 @@
             (kelly ? '<span>半凱利注碼 <b>' + kelly + '</b></span>' : "") +
           '</div>' +
           '<ul class="pick-reasons">' + c.reasons.map(function (r) { return "<li>" + r + "</li>"; }).join("") + '</ul>' +
-          checklistHtml(c.checklist) +
+          (c.checklist ? checklistHtml(c.checklist) : "") +
         '</div>' +
       '</div>'
     );
@@ -2102,6 +2106,51 @@
         }, veto ? "✗" : "🎯");
 
         html += sectionBlock("首局得失分分析(NRFI / YRFI)", inner);
+      }
+
+      // 先發首局 ERA 對決 — 與 TOP5 頁 picks.js 的 mlb_p1era 區塊同一套邏輯:
+      // 不看球隊近況/球場/天氣,純粹用兩位先發各自的首局 ERA split 算 NRFI 機率
+      // (卜瓦松近似 P(單局不失分)=e^(−首局ERA/9)),與上方複合模型互相佐證。
+      if (pp.away && pp.home) {
+        var aP1Era = awayP1 && Number(awayP1.era), hP1Era = homeP1 && Number(homeP1.era);
+        var aP1Ip = awayP1 && Number(awayP1.inningsPitched), hP1Ip = homeP1 && Number(homeP1.inningsPitched);
+        if (isFinite(aP1Era) && isFinite(hP1Era) && aP1Ip >= 8 && hP1Ip >= 8) {
+          var pAwayScoreless = Math.exp(-aP1Era / 9);
+          var pHomeScoreless = Math.exp(-hP1Era / 9);
+          var nrfiP1 = clampNum(pAwayScoreless * pHomeScoreless, 0.05, 0.95);
+          var reasonsP1 = [
+            "客隊先發 " + esc(pp.away.fullName) + " 首局 ERA " + esc(awayP1.era) + "(" + esc(awayP1.inningsPitched) +
+              " 局樣本),換算單局不失分機率 " + pctStr(pAwayScoreless) + "。",
+            "主隊先發 " + esc(pp.home.fullName) + " 首局 ERA " + esc(homeP1.era) + "(" + esc(homeP1.inningsPitched) +
+              " 局樣本),換算單局不失分機率 " + pctStr(pHomeScoreless) + "。",
+            "採卜瓦松近似(P(單局不失分) = e^(−首局 ERA / 9)),僅取兩位先發首局 ERA 相乘,不參考球隊近況、球場或天氣。",
+          ];
+          var pickNrfiP1, probP1, beNrP1, priceLabelP1;
+          if (nrOdds) {
+            var beNP1 = impliedProb(nrOdds.under), beYP1 = impliedProb(nrOdds.over);
+            pickNrfiP1 = nrfiP1 >= 0.5;
+            probP1 = pickNrfiP1 ? nrfiP1 : 1 - nrfiP1;
+            beNrP1 = pickNrfiP1 ? beNP1 : beYP1;
+            priceLabelP1 = (pickNrfiP1 ? nrOdds.under : nrOdds.over) + "(" + nrOdds.book + ")";
+            reasonsP1.push("實際賠率(" + esc(nrOdds.book) + "):NRFI(Under 0.5)" + esc(nrOdds.under) +
+              " / YRFI(Over 0.5)" + esc(nrOdds.over) + ",取模型機率較高的一邊。");
+          } else {
+            pickNrfiP1 = nrfiP1 >= 0.5;
+            probP1 = pickNrfiP1 ? nrfiP1 : 1 - nrfiP1;
+            beNrP1 = impliedProb(NRFI_PRICE);
+            priceLabelP1 = NRFI_PRICE + "(參考)";
+          }
+          reasonsP1.push("估計 " + (pickNrfiP1 ? "NRFI" : "YRFI") + " 機率 <b>" + pctStr(probP1) +
+            "</b>,以 " + esc(priceLabelP1) + " 計損益兩平為 " + pctStr(beNrP1) +
+            ",優勢 <b>" + ((probP1 - beNrP1) >= 0 ? "+" : "") + ((probP1 - beNrP1) * 100).toFixed(1) + "%</b>。");
+          var p1Inner = nrfiPickCardHtml({
+            type: pickNrfiP1 ? "p1nrfi" : "p1yrfi",
+            pick: pickNrfiP1 ? "NRFI 首局雙方皆不得分(先發 ERA 版)" : "YRFI 首局至少一方得分(先發 ERA 版)",
+            price: priceLabelP1, prob: probP1, market: beNrP1, edge: probP1 - beNrP1,
+            reasons: reasonsP1,
+          }, "🎯");
+          html += sectionBlock("先發首局 ERA 對決", p1Inner);
+        }
       }
 
       // American odds analysis (model vs. market implied probability)

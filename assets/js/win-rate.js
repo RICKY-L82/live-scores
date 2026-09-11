@@ -3,6 +3,7 @@
 
   var SECTION_META = {
     mlb_fi: "⚾ MLB 首局 NRFI / YRFI",
+    mlb_p1era: "⚾ MLB 先發首局 ERA 對決",
     mlb_ou: "⚾ MLB 大小分 Over/Under",
     mlb_sp: "⚾ MLB 讓分 Run Line",
     mlb_ml: "⚾ MLB 獨贏勝率",
