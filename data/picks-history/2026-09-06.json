@@ -1,0 +1,427 @@
+{
+  "date": "2026-09-06",
+  "recordedAt": "2026-09-05T22:23:52.138Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Toronto Blue Jays",
+        "home": "Kansas City Royals",
+        "start": "2026-09-05T23:10:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.685728838479311,
+        "edge": 0.09895197897517871,
+        "price": "-142(FanDuel)",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Minnesota Twins",
+        "home": "Chicago White Sox",
+        "start": "2026-09-05T23:10:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.6642428901491284,
+        "edge": 0.13817653943822794,
+        "price": "-111(FanDuel)",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "Athletics",
+        "home": "Seattle Mariners",
+        "start": "2026-09-06T01:40:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.6341283324884359,
+        "edge": 0.1243244109198085,
+        "price": "-104(FanDuel)",
+        "result": "loss"
+      }
+    ],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "Athletics",
+        "home": "Seattle Mariners",
+        "start": "2026-09-06T01:40:00Z",
+        "pick": "大分 Over 7.5",
+        "prob": 0.7771730986354356,
+        "edge": 0.26026488607504916,
+        "price": "-107",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "Arizona Diamondbacks",
+        "home": "Houston Astros",
+        "start": "2026-09-05T23:15:00Z",
+        "pick": "大分 Over 7.5",
+        "prob": 0.6233690364175788,
+        "edge": 0.09285260449269617,
+        "price": "-113",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "St. Louis Cardinals",
+        "home": "Colorado Rockies",
+        "start": "2026-09-06T00:10:00Z",
+        "pick": "大分 Over 11",
+        "prob": 0.6198730474598788,
+        "edge": 0.10296483489949237,
+        "price": "-107",
+        "result": "win"
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "St. Louis Cardinals",
+        "home": "Colorado Rockies",
+        "start": "2026-09-06T00:10:00Z",
+        "pick": "Colorado Rockies +1.5",
+        "prob": 0.6767350584447016,
+        "edge": 0.10046387200402362,
+        "price": "-136",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Arizona Diamondbacks",
+        "home": "Houston Astros",
+        "start": "2026-09-05T23:15:00Z",
+        "pick": "Houston Astros +1.5",
+        "prob": 0.6557671920556462,
+        "edge": 0.006644385038102274,
+        "price": "-185",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Athletics",
+        "home": "Seattle Mariners",
+        "start": "2026-09-06T01:40:00Z",
+        "pick": "Athletics +1.5",
+        "prob": 0.6151112080996315,
+        "edge": 0.04989381679528371,
+        "price": "-130",
+        "result": "win"
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Minnesota Twins",
+        "home": "Chicago White Sox",
+        "start": "2026-09-05T23:10:00Z",
+        "pick": "Chicago White Sox 主勝",
+        "prob": 0.6618,
+        "edge": 0.13799047619047622,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Texas Rangers",
+        "start": "2026-09-05T23:05:00Z",
+        "pick": "Tampa Bay Rays 客勝",
+        "prob": 0.646545546372819,
+        "edge": 0.12273602256329519,
+        "price": "-110(參考,賠率未開)",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "New York Yankees",
+        "home": "San Diego Padres",
+        "start": "2026-09-05T23:15:00Z",
+        "pick": "New York Yankees 客勝",
+        "prob": 0.6136369042305212,
+        "edge": 0.08982738042099736,
+        "price": "-110(參考,賠率未開)",
+        "result": "win"
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Minnesota Twins",
+        "home": "Chicago White Sox",
+        "start": "2026-09-05T23:10:00Z",
+        "pick": "Chicago White Sox 主勝",
+        "prob": 0.6618,
+        "edge": 0.13799047619047622,
+        "price": "-110(參考,賠率未開)",
+        "result": "loss"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Texas Rangers",
+        "start": "2026-09-05T23:05:00Z",
+        "pick": "Tampa Bay Rays 客勝",
+        "prob": 0.646545546372819,
+        "edge": 0.12273602256329519,
+        "price": "-110(參考,賠率未開)",
+        "result": "win"
+      },
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "New York Yankees",
+        "home": "San Diego Padres",
+        "start": "2026-09-05T23:15:00Z",
+        "pick": "New York Yankees 客勝",
+        "prob": 0.6136369042305212,
+        "edge": 0.08982738042099736,
+        "price": "-110(參考,賠率未開)",
+        "result": "win"
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "NC Dinos",
+        "home": "Kiwoom Heroes",
+        "start": "2026-09-06T05:00:00Z",
+        "pick": "NC Dinos 客勝",
+        "prob": 0.5519855471438403,
+        "edge": -0.0035700084117152864,
+        "price": "-125",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "Hanwha Eagles",
+        "home": "Lotte Giants",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "Lotte Giants 主勝",
+        "prob": 0.53,
+        "edge": 0.017804878048780504,
+        "price": "-105",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "Samsung Lions",
+        "home": "LG Twins",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "LG Twins 主勝",
+        "prob": 0.5128841951930081,
+        "edge": 0.06843975074856368,
+        "price": "125",
+        "result": "void"
+      }
+    ],
+    "kbo_ou": [
+      {
+        "league": "KBO",
+        "type": "over",
+        "away": "Hanwha Eagles",
+        "home": "Lotte Giants",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "大分 Over 8.5",
+        "prob": 0.6125999493541556,
+        "edge": 0.1004048274029361,
+        "price": "-105",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "over",
+        "away": "NC Dinos",
+        "home": "Kiwoom Heroes",
+        "start": "2026-09-06T05:00:00Z",
+        "pick": "大分 Over 8",
+        "prob": 0.5976201005303456,
+        "edge": 0.09762010053034564,
+        "price": "100",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "over",
+        "away": "Samsung Lions",
+        "home": "LG Twins",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "大分 Over 8.5",
+        "prob": 0.5806976457892807,
+        "edge": 0.0568881219797569,
+        "price": "-110",
+        "result": "void"
+      }
+    ],
+    "kbo_sp": [
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "Hanwha Eagles",
+        "home": "Lotte Giants",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "Lotte Giants +1.5",
+        "prob": 0.6613605188314764,
+        "edge": 0.053517381576574485,
+        "price": "-155",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "Samsung Lions",
+        "home": "LG Twins",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "LG Twins +1.5",
+        "prob": 0.6455041815086426,
+        "edge": 0.08028679020429486,
+        "price": "-130",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "KT Wiz",
+        "home": "Kia Tigers",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "KT Wiz +1.5",
+        "prob": 0.6252796876692894,
+        "edge": 0.002638178235327193,
+        "price": "-165",
+        "result": "void"
+      }
+    ],
+    "npb_ml": [
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Chiba Lotte Marines",
+        "home": "Orix Buffaloes",
+        "start": "2026-09-06T04:00:00Z",
+        "pick": "Orix Buffaloes 主勝",
+        "prob": 0.5678192718690106,
+        "edge": -0.024017462824866942,
+        "price": "-145",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Saitama Seibu Lions",
+        "home": "Fukuoka SoftBank Hawks",
+        "start": "2026-09-06T04:00:00Z",
+        "pick": "Fukuoka SoftBank Hawks 主勝",
+        "prob": 0.5591938517674083,
+        "edge": -0.02063808100570097,
+        "price": "-138",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Yokohama DeNA BayStars",
+        "home": "Hanshin Tigers",
+        "start": "2026-09-06T09:00:00Z",
+        "pick": "Hanshin Tigers 主勝",
+        "prob": 0.557778286098705,
+        "edge": -0.020280785631252907,
+        "price": "-137",
+        "result": "void"
+      }
+    ],
+    "npb_ou": [
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Saitama Seibu Lions",
+        "home": "Fukuoka SoftBank Hawks",
+        "start": "2026-09-06T04:00:00Z",
+        "pick": "小分 Under 7.5",
+        "prob": 0.5156447348147144,
+        "edge": -0.01923898611551811,
+        "price": "-115",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "over",
+        "away": "Hokkaido Nippon-Ham Fighters",
+        "home": "Tohoku Rakuten Golden Eagles",
+        "start": "2026-09-06T07:00:00Z",
+        "pick": "大分 Over 7",
+        "prob": 0.5125852873727761,
+        "edge": -0.02229843355745642,
+        "price": "-115",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "over",
+        "away": "Chunichi Dragons",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-09-06T08:00:00Z",
+        "pick": "大分 Over 7.5",
+        "prob": 0.5123957834393914,
+        "edge": -0.022487937490841103,
+        "price": "-115",
+        "result": "void"
+      }
+    ],
+    "npb_sp": [
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Yokohama DeNA BayStars",
+        "home": "Hanshin Tigers",
+        "start": "2026-09-06T09:00:00Z",
+        "pick": "Yokohama DeNA BayStars +1.5",
+        "prob": 0.649226434237614,
+        "edge": -0.016325405227268996,
+        "price": "-199",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Yomiuri Giants",
+        "home": "Hiroshima Toyo Carp",
+        "start": "2026-09-06T09:00:00Z",
+        "pick": "Hiroshima Toyo Carp +1.5",
+        "prob": 0.6379884516552249,
+        "edge": -0.01718396213787854,
+        "price": "-190",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Chiba Lotte Marines",
+        "home": "Orix Buffaloes",
+        "start": "2026-09-06T04:00:00Z",
+        "pick": "Chiba Lotte Marines +1.5",
+        "prob": 0.6163629042707262,
+        "edge": -0.013266725358903497,
+        "price": "-170",
+        "result": "void"
+      }
+    ]
+  }
+}
