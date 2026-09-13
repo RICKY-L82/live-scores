@@ -1,0 +1,198 @@
+{
+  "date": "2026-09-14",
+  "recordedAt": "2026-09-13T22:42:12.749Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "yrfi",
+        "away": "San Diego Padres",
+        "home": "San Francisco Giants",
+        "start": "2026-09-13T23:20:00Z",
+        "pick": "YRFI 首局至少一方得分",
+        "prob": 0.6113537258745828,
+        "edge": 0.13516324968410665,
+        "price": "110(FanDuel)",
+        "result": null
+      }
+    ],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "San Diego Padres",
+        "home": "San Francisco Giants",
+        "start": "2026-09-13T23:20:00Z",
+        "pick": "大分 Over 7.5",
+        "prob": 0.7077803622621106,
+        "edge": 0.21273085731161556,
+        "price": "102",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "San Diego Padres",
+        "home": "San Francisco Giants",
+        "start": "2026-09-13T23:20:00Z",
+        "pick": "San Diego Padres -1.5",
+        "prob": 0.5031408073757812,
+        "edge": 0.06835819868012899,
+        "price": "130",
+        "result": null
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "San Diego Padres",
+        "home": "San Francisco Giants",
+        "start": "2026-09-13T23:20:00Z",
+        "pick": "San Diego Padres 客勝",
+        "prob": 0.6393454318295397,
+        "edge": 0.1155359080200159,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "San Diego Padres",
+        "home": "San Francisco Giants",
+        "start": "2026-09-13T23:20:00Z",
+        "pick": "San Diego Padres 客勝",
+        "prob": 0.6393454318295397,
+        "edge": 0.1155359080200159,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Chunichi Dragons",
+        "home": "Hanshin Tigers",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "Hanshin Tigers 主勝",
+        "prob": 0.5720130916072658,
+        "edge": -0.011320241726067604,
+        "price": "-140",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Yomiuri Giants",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "Yokohama DeNA BayStars 主勝",
+        "prob": 0.5574314441028431,
+        "edge": -0.017036641003539965,
+        "price": "-135",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "Hiroshima Toyo Carp 客勝",
+        "prob": 0.5341350384717878,
+        "edge": -0.01943639009964082,
+        "price": "-124",
+        "result": null
+      }
+    ],
+    "npb_ou": [
+      {
+        "league": "NPB",
+        "type": "over",
+        "away": "Yomiuri Giants",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "大分 Over 6.5",
+        "prob": 0.5483883325416763,
+        "edge": -0.01682905876267149,
+        "price": "-130",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "over",
+        "away": "Chunichi Dragons",
+        "home": "Hanshin Tigers",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "大分 Over 5.5",
+        "prob": 0.5221991877208677,
+        "edge": -0.023255357733677706,
+        "price": "-120",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "小分 Under 6.5",
+        "prob": 0.5013542082548641,
+        "edge": -0.02245531555465974,
+        "price": "-110",
+        "result": null
+      }
+    ],
+    "npb_sp": [
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Chunichi Dragons",
+        "home": "Hanshin Tigers",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "Chunichi Dragons +1.5",
+        "prob": 0.6254327924861104,
+        "edge": -0.010930843877525964,
+        "price": "-175",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Yomiuri Giants",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "Yomiuri Giants +1.5",
+        "prob": 0.6169766362610727,
+        "edge": -0.019387000102563667,
+        "price": "-175",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-09-14T09:00:00Z",
+        "pick": "Tokyo Yakult Swallows +1.5",
+        "prob": 0.6066206690797394,
+        "edge": -0.0160208403542228,
+        "price": "-165",
+        "result": null
+      }
+    ]
+  }
+}
