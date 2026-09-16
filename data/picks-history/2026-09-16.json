@@ -13,7 +13,7 @@
         "prob": 0.6461919764755304,
         "edge": 0.12238245266600656,
         "price": "-110(BetOnline.ag)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -25,7 +25,7 @@
         "prob": 0.6429387823686501,
         "edge": 0.0335637823686501,
         "price": "-156(BetOnline.ag)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -37,7 +37,7 @@
         "prob": 0.5631737030035707,
         "edge": 0.06317370300357072,
         "price": "100(BetOnline.ag)",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_p1era": [
@@ -51,7 +51,7 @@
         "prob": 0.7228879476114977,
         "edge": 0.11351294761149766,
         "price": "-156(BetOnline.ag)",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -63,7 +63,7 @@
         "prob": 0.709649558523241,
         "edge": 0.24235983889707274,
         "price": "114(FanDuel)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -75,7 +75,7 @@
         "prob": 0.692037660482276,
         "edge": 0.20423278243349552,
         "price": "105(BetOnline.ag)",
-        "result": null
+        "result": "loss"
       }
     ],
     "mlb_fiw": [
@@ -89,7 +89,7 @@
         "prob": 0.5255415610722275,
         "edge": 0.4228148663926342,
         "price": "",
-        "result": null
+        "result": "push"
       }
     ],
     "mlb_ou": [
@@ -103,7 +103,7 @@
         "prob": 0.7384261786899069,
         "edge": 0.2506213006411264,
         "price": "105",
-        "result": null
+        "result": "win"
       },
       {
         "league": "MLB",
@@ -115,7 +115,7 @@
         "prob": 0.6303096763920908,
         "edge": 0.08693068095830081,
         "price": "-119",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -127,7 +127,7 @@
         "prob": 0.6092438917468506,
         "edge": 0.10924389174685056,
         "price": "100",
-        "result": null
+        "result": "loss"
       }
     ],
     "mlb_sp": [
@@ -141,7 +141,7 @@
         "prob": 0.8093408739889381,
         "edge": 0.29714575203771854,
         "price": "-105",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -153,7 +153,7 @@
         "prob": 0.6536089712900561,
         "edge": 0.017245334926419775,
         "price": "-175",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -165,7 +165,7 @@
         "prob": 0.584350574810679,
         "edge": -0.07082183898242445,
         "price": "-190",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_ml": [
@@ -179,7 +179,7 @@
         "prob": 0.8895817547150151,
         "edge": 0.2680202550676818,
         "price": "-179(運彩換算)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -191,7 +191,7 @@
         "prob": 0.688337254901961,
         "edge": 0.11970841161572943,
         "price": "-143(運彩換算)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -203,7 +203,7 @@
         "prob": 0.681981852913085,
         "edge": 0.0862903137310681,
         "price": "-159(運彩換算)",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_ml_edge": [
@@ -217,7 +217,7 @@
         "prob": 0.8895817547150151,
         "edge": 0.2680202550676818,
         "price": "-179(運彩換算)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -229,7 +229,7 @@
         "prob": 0.5540108505315823,
         "edge": 0.12263969381781392,
         "price": "+124(運彩換算)",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "MLB",
@@ -241,7 +241,7 @@
         "prob": 0.688337254901961,
         "edge": 0.11970841161572943,
         "price": "-143(運彩換算)",
-        "result": null
+        "result": "loss"
       }
     ],
     "wnba_ou": [],
