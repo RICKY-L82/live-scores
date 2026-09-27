@@ -1,0 +1,133 @@
+{
+  "date": "2026-09-28",
+  "recordedAt": "2026-09-27T23:27:22.567Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "Yokohama DeNA BayStars 主勝",
+        "prob": 0.7058759110345966,
+        "edge": -0.02745742229873671,
+        "price": "-275",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Tohoku Rakuten Golden Eagles",
+        "home": "Saitama Seibu Lions",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "Saitama Seibu Lions 主勝",
+        "prob": 0.604886502205641,
+        "edge": -0.020581662588366467,
+        "price": "-167",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Hokkaido Nippon-Ham Fighters",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "Hokkaido Nippon-Ham Fighters 客勝",
+        "prob": 0.5017541411356559,
+        "edge": -0.01747662809511341,
+        "price": "-108",
+        "result": null
+      }
+    ],
+    "npb_ou": [
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Hokkaido Nippon-Ham Fighters",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "小分 Under 6.5",
+        "prob": 0.5167574379229787,
+        "edge": -0.022413068989463714,
+        "price": "-117",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "over",
+        "away": "Tohoku Rakuten Golden Eagles",
+        "home": "Saitama Seibu Lions",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "大分 Over 6",
+        "prob": 0.5157756242332631,
+        "edge": -0.02339488267917933,
+        "price": "-117",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "小分 Under 6.5",
+        "prob": 0.5002237265456017,
+        "edge": -0.02358579726392218,
+        "price": "-110",
+        "result": null
+      }
+    ],
+    "npb_sp": [
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Hokkaido Nippon-Ham Fighters",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "Chiba Lotte Marines +1.5",
+        "prob": 0.6354194054639304,
+        "edge": -0.01975300832917304,
+        "price": "-190",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Tohoku Rakuten Golden Eagles",
+        "home": "Saitama Seibu Lions",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "Tohoku Rakuten Golden Eagles +1.5",
+        "prob": 0.5920942007958812,
+        "edge": -0.01880074083836014,
+        "price": "-157",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-09-28T09:00:00Z",
+        "pick": "Yokohama DeNA BayStars -1.5",
+        "prob": 0.5154196951148378,
+        "edge": -0.023750811797604632,
+        "price": "-117",
+        "result": null
+      }
+    ]
+  }
+}
