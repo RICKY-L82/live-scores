@@ -13,7 +13,7 @@
         "prob": 0.5092294662652571,
         "edge": 0.023792573061373612,
         "price": "106(FanDuel)",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_p1era": [
@@ -27,7 +27,7 @@
         "prob": 0.5026919219301861,
         "edge": -0.0735792645104919,
         "price": "-136(FanDuel)",
-        "result": null
+        "result": "loss"
       }
     ],
     "mlb_fiw": [],
@@ -42,7 +42,7 @@
         "prob": 0.6600002166175517,
         "edge": 0.1526110540559753,
         "price": "-103",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_sp": [
@@ -56,7 +56,7 @@
         "prob": 0.5525455205198956,
         "edge": 0.18079830862398483,
         "price": "169",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_ml": [
@@ -70,7 +70,7 @@
         "prob": 0.6847176002215607,
         "edge": 0.16090807641203686,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       }
     ],
     "mlb_ml_edge": [
@@ -84,7 +84,7 @@
         "prob": 0.6847176002215607,
         "edge": 0.16090807641203686,
         "price": "-110(參考,賠率未開)",
-        "result": null
+        "result": "win"
       }
     ],
     "wnba_ou": [],
