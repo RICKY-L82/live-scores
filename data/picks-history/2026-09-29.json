@@ -23,7 +23,7 @@
         "prob": 0.6183233532934131,
         "edge": -0.13777420768219661,
         "price": "-310",
-        "result": null
+        "result": "void"
       },
       {
         "league": "KBO",
@@ -35,7 +35,7 @@
         "prob": 0.5903399028848901,
         "edge": -0.0763267637817765,
         "price": "-200",
-        "result": null
+        "result": "void"
       },
       {
         "league": "KBO",
@@ -47,7 +47,7 @@
         "prob": 0.5531897775674397,
         "edge": -0.10198263622566373,
         "price": "-190",
-        "result": null
+        "result": "void"
       }
     ],
     "kbo_ou": [
@@ -61,7 +61,7 @@
         "prob": 0.6526256589645976,
         "edge": 0.12432377217214474,
         "price": "-112",
-        "result": null
+        "result": "void"
       },
       {
         "league": "KBO",
@@ -73,7 +73,7 @@
         "prob": 0.6448679854434562,
         "edge": 0.12105846163393241,
         "price": "-110",
-        "result": null
+        "result": "void"
       },
       {
         "league": "KBO",
@@ -85,7 +85,7 @@
         "prob": 0.6129231887062383,
         "edge": 0.10797269365673334,
         "price": "-102",
-        "result": null
+        "result": "void"
       }
     ],
     "kbo_sp": [
@@ -99,7 +99,7 @@
         "prob": 0.6328588561391324,
         "edge": -0.009998286718010507,
         "price": "-180",
-        "result": null
+        "result": "void"
       },
       {
         "league": "KBO",
@@ -111,7 +111,7 @@
         "prob": 0.6064360827677024,
         "edge": 0.023102749434369074,
         "price": "-140",
-        "result": null
+        "result": "void"
       },
       {
         "league": "KBO",
@@ -123,7 +123,7 @@
         "prob": 0.6053045649217503,
         "edge": 0.0814950411122265,
         "price": "-110",
-        "result": null
+        "result": "void"
       }
     ],
     "npb_ml": [
@@ -137,7 +137,7 @@
         "prob": 0.6473473868642626,
         "edge": -0.013669562288279757,
         "price": "-195",
-        "result": null
+        "result": "void"
       },
       {
         "league": "NPB",
@@ -149,7 +149,7 @@
         "prob": 0.626184259815149,
         "edge": -0.01667288304199388,
         "price": "-180",
-        "result": null
+        "result": "void"
       },
       {
         "league": "NPB",
@@ -161,7 +161,7 @@
         "prob": 0.5666290089389714,
         "edge": -0.018433231724929056,
         "price": "-141",
-        "result": null
+        "result": "void"
       }
     ],
     "npb_ou": [
@@ -175,7 +175,7 @@
         "prob": 0.5204412103424572,
         "edge": -0.01659582669457993,
         "price": "-116",
-        "result": null
+        "result": "void"
       },
       {
         "league": "NPB",
@@ -187,7 +187,7 @@
         "prob": 0.5040216292731416,
         "edge": -0.0175094712053272,
         "price": "-109",
-        "result": null
+        "result": "void"
       },
       {
         "league": "NPB",
@@ -199,7 +199,7 @@
         "prob": 0.5023889534648353,
         "edge": -0.021420570344688583,
         "price": "-110",
-        "result": null
+        "result": "void"
       }
     ],
     "npb_sp": [
@@ -213,7 +213,7 @@
         "prob": 0.6708573893581964,
         "edge": -0.010671273062185738,
         "price": "-214",
-        "result": null
+        "result": "void"
       },
       {
         "league": "NPB",
@@ -225,7 +225,7 @@
         "prob": 0.6140108516884676,
         "edge": -0.015618777941162065,
         "price": "-170",
-        "result": null
+        "result": "void"
       },
       {
         "league": "NPB",
@@ -237,7 +237,7 @@
         "prob": 0.5663741841775816,
         "edge": -0.009897002263096422,
         "price": "-136",
-        "result": null
+        "result": "void"
       }
     ]
   }
