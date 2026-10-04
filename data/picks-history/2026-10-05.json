@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-05",
+  "recordedAt": "2026-10-04T23:38:37.464Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "nrfi",
+        "away": "Atlanta Braves",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-05T00:00:00Z",
+        "pick": "NRFI 首局雙方皆不得分",
+        "prob": 0.6033034729932021,
+        "edge": 0.016526613489069808,
+        "price": "-142(FanDuel)",
+        "result": null
+      }
+    ],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "under",
+        "away": "Atlanta Braves",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-05T00:00:00Z",
+        "pick": "小分 Under 8",
+        "prob": 0.680960480362941,
+        "edge": 0.16876535841172147,
+        "price": "-105",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Atlanta Braves",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-05T00:00:00Z",
+        "pick": "Atlanta Braves +1.5",
+        "prob": 0.6005818737351556,
+        "edge": 0.08838675178393607,
+        "price": "-105",
+        "result": null
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Atlanta Braves",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-05T00:00:00Z",
+        "pick": "Los Angeles Dodgers 主勝",
+        "prob": 0.5374390077758499,
+        "edge": 0.013629483966326017,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Atlanta Braves",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-05T00:00:00Z",
+        "pick": "Los Angeles Dodgers 主勝",
+        "prob": 0.5374390077758499,
+        "edge": 0.013629483966326017,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
