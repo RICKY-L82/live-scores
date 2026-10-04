@@ -9,15 +9,21 @@
  * Early in a season every rating is blended with last regular season's,
  * weighted by games played, so the model works from opening night on.
  *
+ *   - upcoming[eventId]: schedule-fatigue features (rest, 背靠背, 4 天 3 戰,
+ *     travel distance, time zones crossed, altitude) for the next two days
+ *   - calib: coefficients fitted by nba-model-lib.js's backtest
+ *
  * data/nba/games.json is this script's own store of finished games
- * (quarter scores), backfilled for last season on first run and then
- * topped up from the last few days' scoreboards. Only free ESPN endpoints
- * are used; the whole run is throttled to once per MIN_INTERVAL_MS.
+ * (quarter scores + DraftKings closing spread/total from ESPN's game
+ * summary), backfilled for last season on first run and then topped up
+ * from the last few days' scoreboards. Only free ESPN endpoints are used;
+ * the whole run is throttled to once per MIN_INTERVAL_MS.
  */
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
+const { ARENAS, fatigue, calibrate } = require("./nba-model-lib");
 
 const DIR = path.join(__dirname, "..", "data", "nba");
 const STATS_FILE = path.join(DIR, "stats.json");
@@ -26,6 +32,9 @@ const MIN_INTERVAL_MS = 3 * 3600000;
 const SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 const BLEND_GP = 15;  // current season gets weight gp/(gp+BLEND_GP) vs last season
 const PREV_H1_WEIGHT = 0.5;
+const PLAYERS_VERSION = 2;  // bump when the per-player fields change
+const LINE_TRIES = 2;
+const RECENT_N = 10;
 
 async function fetchJson(url) {
   const ctrl = new AbortController();
@@ -72,14 +81,41 @@ async function gamesForDate(ymd) {
   }
   return out;
 }
+// DraftKings closing line from ESPN's game summary; hl = home spread
+async function fetchLines(g) {
+  const s = await fetchJson(SITE + "/summary?event=" + g.id);
+  const pc = (s.pickcenter || []).find((p) => isFinite(Number(p.spread)) && isFinite(Number(p.overUnder)));
+  if (!pc) return null;
+  let hl = Number(pc.spread);
+  const m = /^(\S+)\s+([+-]?\d+(?:\.\d+)?)$/.exec(String(pc.details || "").trim());
+  const comp = s.header && s.header.competitions && s.header.competitions[0];
+  const home = comp && comp.competitors.find((c) => c.homeAway === "home");
+  if (m && home && home.team) hl = m[1] === home.team.abbreviation ? Number(m[2]) : -Number(m[2]);
+  return { hl, tot: Number(pc.overUnder) };
+}
+async function fillLines(store) {
+  const todo = Object.values(store.games).filter((g) => !g.ln && (g.lnTries || 0) < LINE_TRIES);
+  let filled = 0, i = 0;
+  async function worker() {
+    while (i < todo.length) {
+      const g = todo[i++];
+      g.lnTries = (g.lnTries || 0) + 1;
+      try {
+        const ln = await fetchLines(g);
+        if (ln) { g.ln = ln; filled++; }
+      } catch (e) { /* retried next run, up to LINE_TRIES */ }
+    }
+  }
+  await Promise.all(Array.from({ length: 8 }, worker));
+  return { tried: todo.length, filled };
+}
 async function topUpGames(store, dates) {
   let added = 0;
   for (const ymd of dates) {
     let games;
     try { games = await gamesForDate(ymd); } catch (e) { console.error("[nba-stats] scoreboard " + ymd + ": " + e.message); continue; }
     for (const g of games) {
-      if (!store.games[g.id]) added++;
-      store.games[g.id] = g;
+      if (!store.games[g.id]) { added++; store.games[g.id] = g; }
     }
   }
   return added;
@@ -155,10 +191,18 @@ async function playerStats(season) {
     return cat ? Number(cat.values[p[1]]) : NaN;
   };
   const out = {};
+  const r1 = (v) => Math.round(v * 10) / 10;
   d.athletes.forEach((a) => {
     const gp = val(a, "general.gamesPlayed"), mpg = val(a, "general.avgMinutes"), ppg = val(a, "offensive.avgPoints");
     if (!(gp > 0) || !isFinite(ppg)) return;
-    out[a.athlete.id] = { n: a.athlete.displayName, s: season, gp, mpg: Math.round(mpg * 10) / 10, ppg: Math.round(ppg * 10) / 10 };
+    // Hollinger Game Score per game (rebounds not split off/def here, so a
+    // flat 0.4 weight) — a box-score all-in-one value, not just scoring
+    const v = (k) => val(a, k) || 0;
+    const gs = ppg + 0.4 * v("offensive.avgFieldGoalsMade") - 0.7 * v("offensive.avgFieldGoalsAttempted") -
+      0.4 * (v("offensive.avgFreeThrowsAttempted") - v("offensive.avgFreeThrowsMade")) +
+      0.4 * v("general.avgRebounds") + v("defensive.avgSteals") + 0.7 * v("offensive.avgAssists") +
+      0.7 * v("defensive.avgBlocks") - v("offensive.avgTurnovers");
+    out[a.athlete.id] = { n: a.athlete.displayName, s: season, gp, mpg: r1(mpg), ppg: r1(ppg), gs: r1(gs) };
   });
   return out;
 }
@@ -188,11 +232,16 @@ async function playerStats(season) {
   for (const id of Object.keys(store.games)) {
     if (store.games[id].season < lastSeason) delete store.games[id];
   }
+  const lines = await fillLines(store);
 
   const teamList = await fetchJson(SITE + "/teams");
   const teamIds = teamList.sports[0].leagues[0].teams.map((t) => t.team.id);
-  const names = {};
-  teamList.sports[0].leagues[0].teams.forEach((t) => { names[t.team.id] = t.team.displayName; });
+  const names = {}, abbr = {};
+  teamList.sports[0].leagues[0].teams.forEach((t) => { names[t.team.id] = t.team.displayName; abbr[t.team.id] = t.team.abbreviation; });
+  const missingArena = teamIds.filter((id) => !ARENAS[abbr[id]]);
+  if (missingArena.length) console.error("[nba-stats] no arena for: " + missingArena.map((id) => abbr[id]).join(", "));
+  const arenaOf = (a) => ARENAS[a] || null;
+  const abbrOf = (id) => abbr[id];
 
   // last season's ratings never change once it's over — compute once and keep
   let prevRatings = prevStats && prevStats.prevSeason === lastSeason && prevStats.prevRatings;
@@ -214,15 +263,45 @@ async function playerStats(season) {
   });
   const lgShare = lgReg ? lgH1 / lgReg : 0.507;
 
-  // most recent game dates per team (for rest days), current season only
-  const lastGames = {};
+  // per-team game history (date + arena) for fatigue, and recent form:
+  // last RECENT_N games' average margin minus the season-to-date average
+  const history = {}, margins = {};
   Object.values(store.games)
-    .filter((g) => g.season === season)
-    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
-    .forEach((g) => [g.away, g.home].forEach((t) => {
-      const arr = lastGames[t] || (lastGames[t] = []);
-      if (arr.length < 3) arr.push(g.date);
-    }));
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
+    .forEach((g) => {
+      const at = abbrOf(g.home);
+      const aPts = g.aq.reduce((x, y) => x + y, 0), hPts = g.hq.reduce((x, y) => x + y, 0);
+      [[g.away, aPts - hPts], [g.home, hPts - aPts]].forEach(([t, m]) => {
+        (history[t] || (history[t] = [])).push({ date: g.date, at });
+        if (g.season === season) (margins[t] || (margins[t] = [])).push(m);
+      });
+    });
+  const recentForm = (t) => {
+    const m = margins[t] || [];
+    if (m.length < 8) return null;
+    const mean = (arr) => arr.reduce((x, y) => x + y, 0) / arr.length;
+    return +(mean(m.slice(-RECENT_N)) - mean(m)).toFixed(2);
+  };
+
+  // fatigue features for the next two days' games
+  const upcoming = {};
+  for (const ymd of [today, etDate(new Date(now + 86400000))]) {
+    let sb;
+    try { sb = await fetchJson(SITE + "/scoreboard?dates=" + ymd.replace(/-/g, "")); } catch (e) { continue; }
+    for (const ev of sb.events || []) {
+      const comp = ev.competitions && ev.competitions[0];
+      if (!comp || comp.status.type.state !== "pre") continue;
+      const home = comp.competitors.find((c) => c.homeAway === "home");
+      const away = comp.competitors.find((c) => c.homeAway === "away");
+      if (!home || !away) continue;
+      const at = abbrOf(home.team.id);
+      upcoming[ev.id] = {
+        h: fatigue(history[home.team.id] || [], ev.date, at, arenaOf),
+        a: fatigue(history[away.team.id] || [], ev.date, at, arenaOf),
+        alt: (arenaOf(at) || [])[3] ? 1 : 0,
+      };
+    }
+  }
 
   const teams = {};
   teamIds.forEach((id) => {
@@ -236,13 +315,14 @@ async function playerStats(season) {
       drtg: r ? +r.drtg.toFixed(2) : null,
       h1Share: s && s.reg ? +(s.h1 / s.reg).toFixed(4) : null,
       h1Games: s ? Math.round(s.n) : 0,
-      lastGames: lastGames[id] || [],
+      recent: recentForm(id),
     };
   });
   const rated = teamIds.map((id) => teams[id]).filter((t) => t.pace);
   const avg = (k) => rated.reduce((x, t) => x + t[k], 0) / (rated.length || 1);
 
-  let curPlayers = {}, prevPlayers = (prevStats && prevStats.prevSeason === lastSeason && prevStats.prevPlayers) || null;
+  let curPlayers = {}, prevPlayers = (prevStats && prevStats.prevSeason === lastSeason &&
+    prevStats.playersVersion === PLAYERS_VERSION && prevStats.prevPlayers) || null;
   try { curPlayers = await playerStats(season); } catch (e) { console.error("[nba-stats] players " + season + ": " + e.message); }
   if (!prevPlayers) {
     try { prevPlayers = await playerStats(lastSeason); } catch (e) { prevPlayers = {}; console.error("[nba-stats] players " + lastSeason + ": " + e.message); }
@@ -254,12 +334,16 @@ async function playerStats(season) {
     updated: new Date(now).toISOString(),
     season, prevSeason: lastSeason,
     league: { pace: +avg("pace").toFixed(2), ortg: +avg("ortg").toFixed(2), h1Share: +lgShare.toFixed(4) },
-    teams, players,
+    teams, players, upcoming,
+    calib: calibrate(store.games, arenaOf, abbrOf),
+    playersVersion: PLAYERS_VERSION,
     prevRatings, prevPlayers,
   };
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(GAMES_FILE, JSON.stringify(store));
   fs.writeFileSync(STATS_FILE, JSON.stringify(out));
+  console.log("[nba-stats] lines: " + lines.filled + "/" + lines.tried + " filled; upcoming " + Object.keys(upcoming).length +
+    "; calib " + (out.calib ? out.calib.games + " games" : "skipped"));
   console.log("[nba-stats] " + added + " new game(s); " + Object.keys(store.games).length + " stored; " +
     rated.length + " team(s) rated (current season: " + Object.keys(curRatings).length + "); " +
     Object.keys(players).length + " player(s); league h1 share " + lgShare.toFixed(4));
