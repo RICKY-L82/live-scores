@@ -26,11 +26,15 @@ jobs:
       - name: Collect odds
         run: node scripts/collect-odds.js
 
+      - name: Collect NBA team/player stats
+        run: node scripts/collect-nba-stats.js
+        continue-on-error: true
+
       - name: Commit and push if changed
         run: |
           git config user.name "odds-bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/odds
+          git add data/odds data/nba
           if git diff --cached --quiet; then
             echo "No odds changes."
             exit 0
