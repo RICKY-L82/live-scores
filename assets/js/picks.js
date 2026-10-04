@@ -1616,61 +1616,207 @@
     });
   }
 
-  // ---------- NBA data (edge = ESPN predictor vs. market) ----------
-  // temporarily disabled (NBA off-season) — kept for when it's re-enabled
-  /*
+  // ---------- NBA data ----------
+  // 獨贏/讓分: ESPN predictor win share vs. market (falls back to the same
+  // record/scoring blend WNBA uses when the predictor is missing).
+  // 大小分: team scoring averages from ESPN standings. 上半場大小分: ESPN carries
+  // no first-half market, so the line comes from The Odds API's "totals_h1",
+  // collected server-side into data/odds/nba-h1.json; without it, a reference line
+  // is derived from the full-game total at NBA_H1_SHARE and priced at -110.
+  var NBA_TOTAL_SD = 18;  // full-game total residual stdev
+  var NBA_MARGIN_SD = 13; // final-margin stdev for 讓分
+  var NBA_H1_SD = 12;     // first-half total residual stdev
+  var NBA_H1_SHARE = 0.507; // first half's share of full-game points
+  var NBA_MIN_GP = 5;       // fewer games than this → use last season's standings
+  function nbaTeamKey(name) { return String(name || "").replace(/^LA /, "Los Angeles "); }
+  function fetchNbaStandingsWithFallback() {
+    var d = new Date();
+    var curSeason = d.getMonth() >= 7 ? d.getFullYear() + 1 : d.getFullYear(); // ESPN labels 2026-27 as 2027
+    return fetchEspnBballStandings("nba").then(function (cur) {
+      var ids = Object.keys(cur);
+      var thin = !ids.length || ids.filter(function (id) {
+        var r = cur[id];
+        return (r.wins || 0) + (r.losses || 0) >= NBA_MIN_GP && r.avgPointsFor;
+      }).length < ids.length / 2;
+      if (!thin) return { map: cur, lastSeason: false };
+      return fetchEspnBballStandings("nba", curSeason - 1).then(function (prev) {
+        return Object.keys(prev).length ? { map: prev, lastSeason: true } : { map: cur, lastSeason: false };
+      });
+    });
+  }
+  // written by scripts/collect-odds.js on the 20-minute cron
+  function fetchNbaH1OddsMap() {
+    return fetchJson("data/odds/nba-h1.json?t=" + Date.now())
+      .then(function (store) {
+        var map = {};
+        Object.keys((store && store.events) || {}).forEach(function (id) {
+          var e = store.events[id];
+          if (e.line === undefined) return;
+          map[nbaTeamKey(e.away) + "|" + nbaTeamKey(e.home)] = {
+            line: e.line, over: e.over, under: e.under, book: e.book, real: true,
+          };
+        });
+        return map;
+      })
+      .catch(function () { return {}; });
+  }
+  function expectedNbaTotal(aRec, hRec) {
+    if (!aRec || !hRec || !aRec.avgPointsFor || !hRec.avgPointsFor || !aRec.avgPointsAgainst || !hRec.avgPointsAgainst) return null;
+    return clampNum((aRec.avgPointsFor + hRec.avgPointsAgainst) / 2 + (hRec.avgPointsFor + aRec.avgPointsAgainst) / 2, 180, 280);
+  }
+  function totalPickCandidate(base, opts) {
+    var pOver = 1 - normCdf((opts.line - opts.exp) / opts.sd);
+    var beO = impliedProb(opts.over), beU = impliedProb(opts.under);
+    if (beO === null || beU === null) return null;
+    var pickOver = pOver >= 0.5;
+    var prob = pickOver ? pOver : 1 - pOver;
+    var be = pickOver ? beO : beU;
+    var reasons = opts.lead.concat([
+      "模型預期" + opts.label + " <b>" + opts.exp.toFixed(1) + "</b> 分 vs 盤口線 <b>" + opts.line +
+        "</b>,估計大分機率 " + pctStr(pOver) + " / 小分 " + pctStr(1 - pOver) + "。",
+      "取優勢較高的「" + (pickOver ? "大分" : "小分") + "」:機率 <b>" + pctStr(prob) +
+        "</b>,以 " + esc(pickOver ? opts.over : opts.under) + " 計損益兩平 " + pctStr(be) +
+        ",優勢 <b>" + ((prob - be) >= 0 ? "+" : "") + ((prob - be) * 100).toFixed(1) + "%</b>。",
+    ]).concat(opts.tail || []);
+    return Object.assign({}, base, {
+      type: opts.typePrefix + (pickOver ? "over" : "under"),
+      pick: opts.pickPrefix + (pickOver ? "大分 Over " : "小分 Under ") + opts.line,
+      price: (pickOver ? opts.over : opts.under) + (opts.real ? "" : "(參考)"),
+      prob: prob, market: be, edge: prob - be,
+      reasons: reasons,
+    });
+  }
+
   function collectNba() {
     var ymd = usTodayISO().replace(/-/g, "");
-    return fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + ymd)
-      .then(function (data) {
-        var pend = (data.events || []).filter(function (ev) {
-          var st = ev.competitions && ev.competitions[0] && ev.competitions[0].status;
-          return st && st.type && st.type.state === "pre";
-        }).slice(0, 12);
-        return Promise.all(pend.map(function (ev) {
-          var comp = ev.competitions[0];
-          var ml = extractMl(comp.odds);
-          if (!ml) return Promise.resolve(null);
-          var home = (comp.competitors || []).find(function (c) { return c.homeAway === "home"; });
-          var away = (comp.competitors || []).find(function (c) { return c.homeAway === "away"; });
-          if (!home || !away) return Promise.resolve(null);
-          return fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=" + ev.id)
-            .then(function (s) {
-              var pred = s.predictor;
-              var aProj = pred && pred.awayTeam && parseFloat(pred.awayTeam.gameProjection);
-              var hProj = pred && pred.homeTeam && parseFloat(pred.homeTeam.gameProjection);
-              if (!aProj || !hProj || aProj + hProj <= 0) return null;
-              var fair = fairProbs(ml.a.cur, ml.h.cur);
-              if (!fair) return null;
-              var modelH = hProj / (aProj + hProj);
-              var edgeH = modelH - fair.home, edgeA = (1 - modelH) - fair.away;
+    return Promise.all([
+      fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + ymd),
+      fetchNbaStandingsWithFallback().catch(function () { return { map: {}, lastSeason: false }; }),
+      fetchNbaH1OddsMap(),
+    ]).then(function (res) {
+      var data = res[0], standings = res[1].map, lastSeason = res[1].lastSeason, h1Map = res[2];
+      var totMap = buildEspnTotMap(data), spreadMap = buildEspnSpreadMap(data);
+      var recNote = lastSeason ? "(本季樣本不足,沿用上季數據)" : "";
+      var pend = (data.events || []).filter(function (ev) {
+        var st = ev.competitions && ev.competitions[0] && ev.competitions[0].status;
+        return st && st.type && st.type.state === "pre";
+      }).slice(0, 15);
+      return Promise.all(pend.map(function (ev) {
+        var comp = ev.competitions[0];
+        var home = (comp.competitors || []).find(function (c) { return c.homeAway === "home"; });
+        var away = (comp.competitors || []).find(function (c) { return c.homeAway === "away"; });
+        if (!home || !away) return Promise.resolve([]);
+        return fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=" + ev.id)
+          .catch(function () { return null; })
+          .then(function (s) {
+            var out = [];
+            var aName = away.team.displayName, hName = home.team.displayName;
+            var base = { league: "NBA", away: aName, home: hName, start: ev.date };
+            var key = aName + "|" + hName;
+            var aRec = standings[away.team.id], hRec = standings[home.team.id];
+            var pred = s && s.predictor;
+            var aProj = pred && pred.awayTeam && parseFloat(pred.awayTeam.gameProjection);
+            var hProj = pred && pred.homeTeam && parseFloat(pred.homeTeam.gameProjection);
+            var modelH = null, modelSrc = "";
+            if (aProj && hProj && aProj + hProj > 0) {
+              modelH = hProj / (aProj + hProj);
+              modelSrc = "ESPN 預測:客 " + aProj.toFixed(1) + "% / 主 " + hProj.toFixed(1) + "%。";
+            } else {
+              modelH = wnbaModelHome(aRec, hRec);
+              if (modelH !== null) {
+                modelSrc = "戰績模型" + recNote + ":客 " + aRec.wins + "-" + aRec.losses + " vs 主 " + hRec.wins + "-" + hRec.losses + "(含主場優勢)。";
+              }
+            }
+
+            // -- 獨贏 --
+            var ml = extractMl(comp.odds);
+            var fair = ml && fairProbs(ml.a.cur, ml.h.cur);
+            if (modelH !== null && fair) {
               var pickHome = modelH >= 0.5;
-              var edge = pickHome ? edgeH : edgeA;
+              var edge = pickHome ? modelH - fair.home : (1 - modelH) - fair.away;
               var prob = pickHome ? modelH : 1 - modelH;
               var reasons = [
-                "ESPN 預測:客 " + aProj.toFixed(1) + "% / 主 " + hProj.toFixed(1) + "%。",
+                modelSrc,
                 "模型勝率 <b>" + pctStr(prob) + "</b> vs 市場中性機率 " + pctStr(pickHome ? fair.home : fair.away) +
                   ",優勢 <b>" + (edge >= 0 ? "+" : "") + (edge * 100).toFixed(1) + "%</b>。",
               ];
-              var mv = mlMoveNote(ml, pickHome, away.team.displayName, home.team.displayName);
+              var mv = mlMoveNote(ml, pickHome, aName, hName);
               if (mv) reasons.push(mv);
-              return {
-                league: "NBA", type: "ml",
-                away: away.team.displayName, home: home.team.displayName,
-                start: ev.date,
-                pick: pickHome ? home.team.displayName + " 主勝" : away.team.displayName + " 客勝",
+              out.push(Object.assign({}, base, {
+                type: "ml",
+                pick: pickHome ? hName + " 主勝" : aName + " 客勝",
                 price: String(pickHome ? ml.h.cur : ml.a.cur),
                 prob: prob, market: pickHome ? fair.home : fair.away, edge: edge,
                 reasons: reasons,
-              };
-            })
-            .catch(function () { return null; });
-        }));
-      })
-      .then(function (arr) { return arr.filter(Boolean); })
+              }));
+            }
+
+            // -- 讓分 --
+            var sp = spreadMap[key];
+            if (sp && modelH !== null) {
+              var pHomeCover = homeCoverProb(modelH, sp.home.line, NBA_MARGIN_SD);
+              var beHomeSp = impliedProb(sp.home.price), beAwaySp = impliedProb(sp.away.price);
+              if (beHomeSp !== null && beAwaySp !== null) {
+                var pickHomeSp = pHomeCover >= 0.5;
+                var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
+                var beSp = pickHomeSp ? beHomeSp : beAwaySp;
+                var lineSp = pickHomeSp ? sp.home.line : sp.away.line;
+                var priceSp = pickHomeSp ? sp.home.price : sp.away.price;
+                out.push(Object.assign({}, base, {
+                  type: "spread",
+                  pick: (pickHomeSp ? hName : aName) + " " + (lineSp >= 0 ? "+" : "") + lineSp,
+                  price: String(priceSp),
+                  prob: probSp, market: beSp, edge: probSp - beSp,
+                  reasons: [
+                    modelSrc,
+                    "模型獨贏勝率 <b>" + pctStr(modelH) + "</b>(主)反推期望分差,估計" +
+                      (pickHomeSp ? "主" : "客") + "隊讓分 " + (lineSp >= 0 ? "+" : "") + lineSp +
+                      " 覆蓋機率 <b>" + pctStr(probSp) + "</b>。",
+                    "以 " + esc(priceSp) + " 計損益兩平 " + pctStr(beSp) + ",優勢 <b>" +
+                      ((probSp - beSp) >= 0 ? "+" : "") + ((probSp - beSp) * 100).toFixed(1) + "%</b>。",
+                  ],
+                }));
+              }
+            }
+
+            // -- 大小分 / 上半場大小分 --
+            var expTot = expectedNbaTotal(aRec, hRec);
+            if (expTot !== null) {
+              var scoring = [
+                "客隊場均得 " + aRec.avgPointsFor.toFixed(1) + " 分/失 " + aRec.avgPointsAgainst.toFixed(1) +
+                  " 分;主隊場均得 " + hRec.avgPointsFor.toFixed(1) + " 分/失 " + hRec.avgPointsAgainst.toFixed(1) + " 分" + recNote + "。",
+              ];
+              var tot = totMap[key];
+              if (tot) {
+                var cT = totalPickCandidate(base, {
+                  line: tot.line, over: tot.over, under: tot.under, real: tot.real, exp: expTot, sd: NBA_TOTAL_SD,
+                  label: "總分", typePrefix: "", pickPrefix: "", lead: scoring,
+                  tail: tot.real ? [] : ["ESPN 僅開出總分線、尚未開出大小分價位,暫以 -110 參考水位估算,開盤後請以實際賠率為準。"],
+                });
+                if (cT) out.push(cT);
+              }
+              var h1 = h1Map[nbaTeamKey(aName) + "|" + nbaTeamKey(hName)];
+              if (!h1 && tot) {
+                h1 = { line: Math.round(tot.line * NBA_H1_SHARE * 2) / 2, over: NRFI_PRICE, under: NRFI_PRICE, real: false };
+              }
+              if (h1) {
+                var cH = totalPickCandidate(base, {
+                  line: h1.line, over: h1.over, under: h1.under, real: h1.real, exp: expTot * NBA_H1_SHARE, sd: NBA_H1_SD,
+                  label: "上半場總分", typePrefix: "h1", pickPrefix: "上半場 ", lead: scoring,
+                  tail: [h1.real
+                    ? "上半場盤口來自 The Odds API(" + esc(h1.book) + ");模型以全場預期總分 × " + NBA_H1_SHARE + " 估上半場。"
+                    : "暫無上半場實際盤口(The Odds API 未開出或配額用罄),以全場總分線 × " + NBA_H1_SHARE + " 推估參考線並以 -110 估算,請以實際盤口為準。"],
+                });
+                if (cH) out.push(cH);
+              }
+            }
+            return out;
+          });
+      }));
+    })
+      .then(function (arr) { return [].concat.apply([], arr); })
       .catch(function () { return []; });
   }
-  */
 
   // ---------- WNBA data (edge = own record/scoring model vs. market) ----------
   // ESPN's free WNBA predictor endpoint only exposes a relative-strength
@@ -1685,11 +1831,19 @@
     var w = Number(parts[0]), l = Number(parts[1]);
     return (w + l) > 0 ? w / (w + l) : null;
   }
-  function fetchWnbaStandings() {
-    return fetchJson("https://site.api.espn.com/apis/v2/sports/basketball/wnba/standings?level=3")
+  function fetchWnbaStandings() { return fetchEspnBballStandings("wnba"); }
+  function fetchEspnBballStandings(leagueKey, season) {
+    return fetchJson("https://site.api.espn.com/apis/v2/sports/basketball/" + leagueKey + "/standings?level=3" +
+      (season ? "&season=" + season + "&seasontype=2" : ""))
       .then(function (d) {
         var map = {};
-        (d.children || []).forEach(function (grp) {
+        // WNBA nests league → conference; NBA adds a division level below that
+        var groups = [];
+        (function walk(node) {
+          if (node.standings) groups.push(node);
+          (node.children || []).forEach(walk);
+        })(d);
+        groups.forEach(function (grp) {
           ((grp.standings && grp.standings.entries) || []).forEach(function (e) {
             var teamId = e.team && e.team.id;
             if (!teamId) return;
@@ -2403,6 +2557,7 @@
     ml: "獨贏", nrfi: "首局 NRFI", yrfi: "首局 YRFI",
     p1nrfi: "先發ERA NRFI", p1yrfi: "先發ERA YRFI", fiw: "首局勝負",
     over: "大分", under: "小分", spread: "讓分",
+    h1over: "上半場大分", h1under: "上半場小分",
   };
 
   function pickCardHtml(c, rank) {
@@ -2496,7 +2651,10 @@
     var spWnba = sp.filter(function (c) { return c.league === "WNBA"; });
     var mlMlb = ml.filter(function (c) { return c.league === "MLB"; });
     var mlMlbByEdge = mlMlb.slice().sort(byEdge);
-    var mlNba = []; // NBA temporarily disabled — ml.filter(function (c) { return c.league === "NBA"; });
+    var mlNba = ml.filter(function (c) { return c.league === "NBA"; });
+    var ouNba = ou.filter(function (c) { return c.league === "NBA"; });
+    var spNba = sp.filter(function (c) { return c.league === "NBA"; });
+    var h1Nba = candidates.filter(function (c) { return c.type === "h1over" || c.type === "h1under"; }).sort(byProb);
     var ouKbo = ou.filter(function (c) { return c.league === "KBO"; });
     var spKbo = sp.filter(function (c) { return c.league === "KBO"; });
     var mlKbo = ml.filter(function (c) { return c.league === "KBO"; });
@@ -2504,11 +2662,11 @@
     var spNpb = sp.filter(function (c) { return c.league === "NPB"; });
     var mlNpb = ml.filter(function (c) { return c.league === "NPB"; });
 
-    if (!fiAll.length && !fiP1.length && !fiw.length && !ml.length && !ou.length && !sp.length) {
+    if (!fiAll.length && !fiP1.length && !fiw.length && !ml.length && !ou.length && !sp.length && !h1Nba.length) {
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
       window.__picksSections = {
         mlb_fi: [], mlb_p1era: [], mlb_fiw: [], mlb_ou: [], mlb_sp: [], mlb_ml: [], mlb_ml_edge: [],
-        wnba_ou: [], wnba_sp: [], nba_ml: [],
+        wnba_ou: [], wnba_sp: [], nba_ml: [], nba_sp: [], nba_ou: [], nba_h1: [],
         kbo_ml: [], kbo_ou: [], kbo_sp: [], npb_ml: [], npb_ou: [], npb_sp: [],
       };
       window.__picksReady = true;
@@ -2532,17 +2690,16 @@
     var wnbaSubHtml =
       sectionHtml("wnba_ou", "📊 大小分 Over/Under", ouWnba.slice(0, TOP_N), ouWnba.length) +
       sectionHtml("wnba_sp", "🎯 讓分 Spread", spWnba.slice(0, TOP_N), spWnba.length);
-    // NBA temporarily disabled
-    // var nbaSubHtml =
-    //   sectionHtml("nba_ml", "🏆 獨贏勝率", mlNba.slice(0, TOP_N), mlNba.length);
-    var kboSubHtml =
-      sectionHtml("kbo_ml", "🏆 獨贏勝率", mlKbo.slice(0, TOP_N), mlKbo.length) +
-      sectionHtml("kbo_ou", "📊 大小分 Over/Under", ouKbo.slice(0, TOP_N), ouKbo.length) +
-      sectionHtml("kbo_sp", "🎯 讓分 Run Line", spKbo.slice(0, TOP_N), spKbo.length);
-    var npbSubHtml =
-      sectionHtml("npb_ml", "🏆 獨贏勝率", mlNpb.slice(0, TOP_N), mlNpb.length) +
-      sectionHtml("npb_ou", "📊 大小分 Over/Under", ouNpb.slice(0, TOP_N), ouNpb.length) +
-      sectionHtml("npb_sp", "🎯 讓分 Run Line", spNpb.slice(0, TOP_N), spNpb.length);
+    var nbaSubHtml = nbaSectionsHtml(mlNba, spNba, ouNba, h1Nba);
+    // KBO/NPB temporarily disabled
+    // var kboSubHtml =
+    //   sectionHtml("kbo_ml", "🏆 獨贏勝率", mlKbo.slice(0, TOP_N), mlKbo.length) +
+    //   sectionHtml("kbo_ou", "📊 大小分 Over/Under", ouKbo.slice(0, TOP_N), ouKbo.length) +
+    //   sectionHtml("kbo_sp", "🎯 讓分 Run Line", spKbo.slice(0, TOP_N), spKbo.length);
+    // var npbSubHtml =
+    //   sectionHtml("npb_ml", "🏆 獨贏勝率", mlNpb.slice(0, TOP_N), mlNpb.length) +
+    //   sectionHtml("npb_ou", "📊 大小分 Over/Under", ouNpb.slice(0, TOP_N), ouNpb.length) +
+    //   sectionHtml("npb_sp", "🎯 讓分 Run Line", spNpb.slice(0, TOP_N), spNpb.length);
 
     // slim, serializable snapshot for scripts/record-picks.js (Playwright)
     // to read via page.evaluate() — same lists/order the page itself shows,
@@ -2559,7 +2716,7 @@
       mlb_fi: slim(fi), mlb_p1era: slim(fiP1), mlb_fiw: slim(fiw), mlb_ou: slim(ouMlb), mlb_sp: slim(spMlb),
       mlb_ml: slim(mlMlb), mlb_ml_edge: slim(mlMlbByEdge),
       wnba_ou: slim(ouWnba), wnba_sp: slim(spWnba),
-      nba_ml: slim(mlNba),
+      nba_ml: slim(mlNba), nba_sp: slim(spNba), nba_ou: slim(ouNba), nba_h1: slim(h1Nba),
       kbo_ml: slim(mlKbo), kbo_ou: slim(ouKbo), kbo_sp: slim(spKbo),
       npb_ml: slim(mlNpb), npb_ou: slim(ouNpb), npb_sp: slim(spNpb),
     };
@@ -2567,9 +2724,10 @@
     var mainHtml =
       leagueSectionHtml("⚾", "MLB", fi.length + fiP1.length + fiw.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
       leagueSectionHtml("🏀", "WNBA", ouWnba.length + spWnba.length, wnbaSubHtml) +
-      // leagueSectionHtml("🏀", "NBA", mlNba.length, nbaSubHtml) + // NBA temporarily disabled
-      leagueSectionHtml("🇰🇷", "KBO 韓國職棒", mlKbo.length + ouKbo.length + spKbo.length, kboSubHtml) +
-      leagueSectionHtml("🇯🇵", "NPB 日本職棒", mlNpb.length + ouNpb.length + spNpb.length, npbSubHtml);
+      leagueSectionHtml("🏀", "NBA", mlNba.length + spNba.length + ouNba.length + h1Nba.length, nbaSubHtml);
+      // KBO/NPB temporarily disabled
+      // leagueSectionHtml("🇰🇷", "KBO 韓國職棒", mlKbo.length + ouKbo.length + spKbo.length, kboSubHtml) +
+      // leagueSectionHtml("🇯🇵", "NPB 日本職棒", mlNpb.length + ouNpb.length + spNpb.length, npbSubHtml);
     el.innerHTML =
       '<div class="picks-intro analysis-box"><p>' +
       '共掃描 <b>' + candidates.length + '</b> 個候選,先依聯盟(MLB／WNBA／NBA／KBO／NPB)分組,各聯盟下再分「首局 NRFI/YRFI」「大小分」「讓分」「獨贏勝率」等類別,' +
@@ -2578,6 +2736,7 @@
       'MLB 再多一個獨立的「先發首局 ERA 對決」子區塊:不看球隊近況、球場或天氣,純粹取兩位先發投手各自的「首局 ERA」split(至少需 8 局首局樣本),以卜瓦松近似 P(單局不失分)=e^(−首局ERA/9) 相乘估計 NRFI 機率,是與上方複合模型互相佐證的另一個角度。' +
       '「首局勝負預測」則是同一組首局 ERA 數據的另一種用法:不是問「首局會不會有人得分」,而是把兩邊首局預期得分(對方先發的首局 ERA)當成卜瓦松分布,模擬比較客隊/主隊誰在首局搶分機率較高,建議買分數較可能領先的一邊;此區無對應公開盤口,純模型預測,不計半凱利注碼。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
+      'NBA 獨贏/讓分以 ESPN 預測勝率為模型,大小分以兩隊場均得失分估預期總分;上半場大小分盤口取自 The Odds API,模型以全場預期總分 × ' + NBA_H1_SHARE + ' 估上半場,開季初樣本不足時沿用上季數據。' +
       'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯)、主場球場修正(靜態表,依 2024 全壘打 park factor 估計)、以及當日主場高溫預報修正(Open-Meteo,僅溫度,無球場座向資料故不做風向修正)。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
@@ -2596,8 +2755,7 @@
         localStorage.removeItem("nrfiOddsCache");
         localStorage.removeItem("kboOddsCache");
         localStorage.removeItem("npbOddsCache");
-        localStorage.removeItem("mlbOddsCache");
-      } catch (err) {}
+        localStorage.removeItem("mlbOddsCache");      } catch (err) {}
       run();
     });
   }
@@ -2608,10 +2766,10 @@
     document.getElementById("updatedAt").textContent = "計算中…";
     Promise.all([
       collectMlb().catch(function () { return []; }),
-      Promise.resolve([]), // NBA temporarily disabled — see collectNba() above
+      collectNba().catch(function () { return []; }),
       collectWnba().catch(function () { return []; }),
-      collectKbo().catch(function () { return []; }),
-      collectNpb().catch(function () { return []; }),
+      Promise.resolve([]), // KBO temporarily disabled — collectKbo()
+      Promise.resolve([]), // NPB temporarily disabled — collectNpb()
       fetchJson("data/picks-stats.json?t=" + Date.now()).catch(function () { return null; }),
     ]).then(function (res) {
       picksStats = res[5];
@@ -2698,6 +2856,25 @@
       sections: { wnba_ou: slimPicks(ou), wnba_sp: slimPicks(sp) },
     };
   }
+  function nbaSectionsHtml(ml, sp, ou, h1) {
+    return sectionHtml("nba_sp", "🎯 讓分 Spread", sp.slice(0, TOP_N), sp.length) +
+      sectionHtml("nba_ou", "📊 大小分 Over/Under", ou.slice(0, TOP_N), ou.length) +
+      sectionHtml("nba_h1", "⏱️ 上半場大小分", h1.slice(0, TOP_N), h1.length) +
+      sectionHtml("nba_ml", "🏆 獨贏勝率", ml.slice(0, TOP_N), ml.length);
+  }
+  function buildNbaLeagueBlock(rawCandidates) {
+    var candidates = futureOnly(rawCandidates);
+    var byProb = function (a, b) { return b.prob - a.prob; };
+    var ml = candidates.filter(function (c) { return c.type === "ml"; }).sort(byProb);
+    var sp = candidates.filter(function (c) { return c.type === "spread"; }).sort(byProb);
+    var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }).sort(byProb);
+    var h1 = candidates.filter(function (c) { return c.type === "h1over" || c.type === "h1under"; }).sort(byProb);
+    return {
+      empty: !ml.length && !sp.length && !ou.length && !h1.length,
+      html: leagueSectionHtml("🏀", "NBA", ml.length + sp.length + ou.length + h1.length, nbaSectionsHtml(ml, sp, ou, h1)),
+      sections: { nba_ml: slimPicks(ml), nba_sp: slimPicks(sp), nba_ou: slimPicks(ou), nba_h1: slimPicks(h1) },
+    };
+  }
   function buildOddsLeagueBlock(icon, label, prefix, rawCandidates) {
     var candidates = futureOnly(rawCandidates);
     var byProb = function (a, b) { return b.prob - a.prob; };
@@ -2721,14 +2898,16 @@
   var TAB_LEAGUES = {
     mlb: { label: "MLB", collect: function () { return collectMlb().catch(function () { return []; }); }, build: buildMlbLeagueBlock },
     wnba: { label: "WNBA", collect: function () { return collectWnba().catch(function () { return []; }); }, build: buildWnbaLeagueBlock },
-    kbo: {
-      label: "KBO", collect: function () { return collectKbo().catch(function () { return []; }); },
-      build: function (c) { return buildOddsLeagueBlock("🇰🇷", "KBO 韓國職棒", "kbo", c); },
-    },
-    npb: {
-      label: "NPB", collect: function () { return collectNpb().catch(function () { return []; }); },
-      build: function (c) { return buildOddsLeagueBlock("🇯🇵", "NPB 日本職棒", "npb", c); },
-    },
+    nba: { label: "NBA", collect: function () { return collectNba().catch(function () { return []; }); }, build: buildNbaLeagueBlock },
+    // KBO/NPB temporarily disabled
+    // kbo: {
+    //   label: "KBO", collect: function () { return collectKbo().catch(function () { return []; }); },
+    //   build: function (c) { return buildOddsLeagueBlock("🇰🇷", "KBO 韓國職棒", "kbo", c); },
+    // },
+    // npb: {
+    //   label: "NPB", collect: function () { return collectNpb().catch(function () { return []; }); },
+    //   build: function (c) { return buildOddsLeagueBlock("🇯🇵", "NPB 日本職棒", "npb", c); },
+    // },
   };
   var leagueBlockCache = {};
   var activeLeagueTab = null;
@@ -2753,8 +2932,7 @@
         localStorage.removeItem("nrfiOddsCache");
         localStorage.removeItem("kboOddsCache");
         localStorage.removeItem("npbOddsCache");
-        localStorage.removeItem("mlbOddsCache");
-      } catch (err) {}
+        localStorage.removeItem("mlbOddsCache");      } catch (err) {}
       leagueBlockCache = {};
       if (activeLeagueTab) loadLeagueTab(activeLeagueTab, true);
     });

@@ -28,7 +28,7 @@ const path = require("path");
 
 const LEAGUES = {
   mlb: "baseball/mlb",
-  // nba: "basketball/nba", // temporarily disabled — NBA off-season, will re-enable later
+  nba: "basketball/nba",
   wnba: "basketball/wnba",
 };
 const OUT_DIR = path.join(__dirname, "..", "data", "odds");
@@ -46,7 +46,7 @@ const MAX_SNAPS = 300;        // hard cap per event
 // 大小分走勢 signal isn't worth risking the shared quota for.
 // same keys assets/js/picks.js falls back between; already public in client JS
 const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97", "b998595122a6efd15f322466e21ee2b5"];
-const ODDS_API_LEAGUES = { kbo: "baseball_kbo", npb: "baseball_npb" };
+const ODDS_API_LEAGUES = {}; // KBO/NPB temporarily disabled — { kbo: "baseball_kbo", npb: "baseball_npb" }
 const ODDS_API_MIN_INTERVAL_MS = 4 * 3600000; // 4h → ~360 credits/month for these two leagues combined
 
 // tries each key in turn, only moving to the next on a quota/auth failure
@@ -266,7 +266,88 @@ async function collectOddsApiLeague(league, sportKey) {
   return added;
 }
 
+// NBA 上半場大小分 (totals_h1) for assets/js/picks.js. Collected here instead of
+// client-side so every visitor and record-picks.js share one fetch instead of
+// each fresh browser spending credits. Each per-event odds call costs 1 credit,
+// so a game is fetched at most twice: once when it first enters the 30h window
+// (retried every 3h, up to 4 tries, while books haven't posted the market),
+// then once more inside 6h of tip-off for a closer line. /events itself is free.
+const NBA_H1_FILE = path.join(OUT_DIR, "nba-h1.json");
+const NBA_H1_WINDOW_MS = 30 * 3600000;
+const NBA_H1_LATE_MS = 6 * 3600000;
+const NBA_H1_RETRY_MS = 3 * 3600000;
+const NBA_H1_MAX_TRIES = 4;
+const NBA_H1_MAX_CALLS = 15;
+
+function h1FromEvent(ev) {
+  for (const bk of ev.bookmakers || []) {
+    const mk = (bk.markets || []).find((m) => m.key === "totals_h1");
+    if (!mk) continue;
+    const over = (mk.outcomes || []).find((o) => o.name === "Over");
+    const under = (mk.outcomes || []).find((o) => o.name === "Under");
+    if (over && under && Number(over.point) === Number(under.point) && isFinite(Number(over.point))) {
+      return { line: Number(over.point), over: String(over.price), under: String(under.price), book: bk.title };
+    }
+  }
+  return null;
+}
+
+async function collectNbaH1() {
+  let store;
+  try { store = JSON.parse(fs.readFileSync(NBA_H1_FILE, "utf8")); } catch (e) { store = { updated: null, events: {} }; }
+  const now = Date.now();
+  const events = await fetchOddsApiWithFallback((key) =>
+    "https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey=" + key
+  );
+  let calls = 0, updated = 0;
+  for (const ev of events || []) {
+    const start = new Date(ev.commence_time).getTime();
+    if (!(start > now && start < now + NBA_H1_WINDOW_MS)) continue;
+    const entry = store.events[ev.id] || (store.events[ev.id] = {
+      away: ev.away_team, home: ev.home_team, start: ev.commence_time, tries: 0, lastTry: 0, late: false,
+    });
+    const due = entry.line === undefined
+      ? entry.tries < NBA_H1_MAX_TRIES && now - entry.lastTry >= NBA_H1_RETRY_MS
+      : !entry.late && start - now < NBA_H1_LATE_MS;
+    if (!due || calls >= NBA_H1_MAX_CALLS) continue;
+    calls++;
+    let d;
+    try {
+      d = await fetchOddsApiWithFallback((key) =>
+        "https://api.the-odds-api.com/v4/sports/basketball_nba/events/" + ev.id +
+        "/odds?apiKey=" + key + "&regions=us&markets=totals_h1&oddsFormat=american"
+      );
+    } catch (e) {
+      console.error("[nba-h1] " + ev.away_team + " @ " + ev.home_team + ": " + e.message);
+      continue;
+    }
+    const hadLine = entry.line !== undefined;
+    entry.tries++;
+    entry.lastTry = now;
+    if (hadLine) entry.late = true;
+    const h1 = h1FromEvent(d);
+    if (h1) {
+      Object.assign(entry, h1);
+      updated++;
+    }
+  }
+  for (const id of Object.keys(store.events)) {
+    const d = new Date(store.events[id].start).getTime();
+    if (!isFinite(d) || d < now - 86400000) delete store.events[id];
+  }
+  store.updated = new Date(now).toISOString();
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(NBA_H1_FILE, JSON.stringify(store));
+  console.log("[nba-h1] " + calls + " odds call(s), " + updated + " line(s) updated, " +
+    Object.keys(store.events).length + " event(s) tracked");
+}
+
 (async () => {
+  try {
+    await collectNbaH1();
+  } catch (e) {
+    console.error("[nba-h1] collection failed: " + (e && e.message));
+  }
   let failures = 0;
   for (const [league, slug] of Object.entries(LEAGUES)) {
     try {

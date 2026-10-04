@@ -352,10 +352,10 @@
     document.getElementById("updatedAt").textContent = "計算中…";
     Promise.all([
       fetchMlbGames(),
-      Promise.resolve([]), // NBA temporarily disabled — fetchEspnGames("nba", "NBA")
+      fetchEspnGames("nba", "NBA"),
       fetchEspnGames("wnba", "WNBA"),
-      fetchOddsApiGames("baseball_kbo", "KBO"),
-      fetchOddsApiGames("baseball_npb", "NPB"),
+      Promise.resolve([]), // KBO temporarily disabled — fetchOddsApiGames("baseball_kbo", "KBO")
+      Promise.resolve([]), // NPB temporarily disabled — fetchOddsApiGames("baseball_npb", "NPB")
     ]).then(function (res) {
       var games = res[0].concat(res[1]).concat(res[2]).concat(res[3]).concat(res[4]);
       return collectLineDirection(games);

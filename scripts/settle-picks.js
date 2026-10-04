@@ -36,7 +36,8 @@ const SECTION_META = {
   mlb_ou: "⚾ MLB 大小分 Over/Under", mlb_sp: "⚾ MLB 讓分 Run Line",
   mlb_ml: "⚾ MLB 獨贏勝率", mlb_ml_edge: "⚾ MLB 獨贏優勢",
   wnba_ou: "🏀 WNBA 大小分 Over/Under", wnba_sp: "🏀 WNBA 讓分 Spread",
-  nba_ml: "🏀 NBA 獨贏勝率",
+  nba_ml: "🏀 NBA 獨贏勝率", nba_sp: "🏀 NBA 讓分 Spread", nba_ou: "🏀 NBA 大小分 Over/Under",
+  nba_h1: "🏀 NBA 上半場大小分",
   kbo_ml: "🇰🇷 KBO 獨贏勝率", kbo_ou: "🇰🇷 KBO 大小分 Over/Under", kbo_sp: "🇰🇷 KBO 讓分 Run Line",
   npb_ml: "🇯🇵 NPB 獨贏勝率", npb_ou: "🇯🇵 NPB 大小分 Over/Under", npb_sp: "🇯🇵 NPB 讓分 Run Line",
 };
@@ -91,7 +92,7 @@ function settleTotal(pick, total) {
   if (line === null) return null;
   if (total === line) return "push";
   const over = total > line;
-  return (pick.type === "over") === over ? "win" : "loss";
+  return (pick.type === "over" || pick.type === "h1over") === over ? "win" : "loss";
 }
 function settleFi(pick, inning1Total) {
   const scored = inning1Total > 0;
@@ -169,8 +170,14 @@ async function espnGamesForDate(leagueKey, date) {
         const home = comp.competitors.find((c) => c.homeAway === "home");
         const away = comp.competitors.find((c) => c.homeAway === "away");
         if (!home || !away) return;
+        const firstHalf = (c) => {
+          const ls = c.linescores || [];
+          return ls.length >= 2 ? Number(ls[0].value) + Number(ls[1].value) : null;
+        };
+        const aH1 = firstHalf(away), hH1 = firstHalf(home);
         map.set(away.team.displayName + "|" + home.team.displayName, {
           awayScore: Number(away.score), homeScore: Number(home.score),
+          h1Total: aH1 === null || hH1 === null ? null : aH1 + hH1,
         });
       });
       return map;
@@ -186,6 +193,10 @@ async function settleEspnPick(leagueKey, pick) {
   if (pick.type === "ml") return settleMl(pick, game.awayScore, game.homeScore);
   if (pick.type === "spread") return settleSpread(pick, game.awayScore, game.homeScore);
   if (pick.type === "over" || pick.type === "under") return settleTotal(pick, game.awayScore + game.homeScore);
+  if (pick.type === "h1over" || pick.type === "h1under") {
+    if (game.h1Total === null || !isFinite(game.h1Total)) return null;
+    return settleTotal(pick, game.h1Total);
+  }
   return null;
 }
 
