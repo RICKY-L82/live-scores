@@ -1,0 +1,244 @@
+{
+  "date": "2026-09-29",
+  "recordedAt": "2026-09-29T00:39:27.949Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "Hanwha Eagles",
+        "home": "Samsung Lions",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "Samsung Lions 主勝",
+        "prob": 0.6183233532934131,
+        "edge": -0.13777420768219661,
+        "price": "-310",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "Kiwoom Heroes",
+        "home": "Lotte Giants",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "Lotte Giants 主勝",
+        "prob": 0.5903399028848901,
+        "edge": -0.0763267637817765,
+        "price": "-200",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "NC Dinos",
+        "home": "Doosan Bears",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "Doosan Bears 主勝",
+        "prob": 0.5531897775674397,
+        "edge": -0.10198263622566373,
+        "price": "-190",
+        "result": "void"
+      }
+    ],
+    "kbo_ou": [
+      {
+        "league": "KBO",
+        "type": "over",
+        "away": "LG Twins",
+        "home": "SSG Landers",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "大分 Over 9",
+        "prob": 0.6526256589645976,
+        "edge": 0.12432377217214474,
+        "price": "-112",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "under",
+        "away": "Kiwoom Heroes",
+        "home": "Lotte Giants",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "小分 Under 10.5",
+        "prob": 0.6448679854434562,
+        "edge": 0.12105846163393241,
+        "price": "-110",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "over",
+        "away": "KT Wiz",
+        "home": "Kia Tigers",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "大分 Over 8.5",
+        "prob": 0.6129231887062383,
+        "edge": 0.10797269365673334,
+        "price": "-102",
+        "result": "void"
+      }
+    ],
+    "kbo_sp": [
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "KT Wiz",
+        "home": "Kia Tigers",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "KT Wiz +1.5",
+        "prob": 0.6328588561391324,
+        "edge": -0.009998286718010507,
+        "price": "-180",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "LG Twins",
+        "home": "SSG Landers",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "SSG Landers +1.5",
+        "prob": 0.6064360827677024,
+        "edge": 0.023102749434369074,
+        "price": "-140",
+        "result": "void"
+      },
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "Hanwha Eagles",
+        "home": "Samsung Lions",
+        "start": "2026-09-29T09:30:00Z",
+        "pick": "Hanwha Eagles +2.5",
+        "prob": 0.6053045649217503,
+        "edge": 0.0814950411122265,
+        "price": "-110",
+        "result": "void"
+      }
+    ],
+    "npb_ml": [
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Tokyo Yakult Swallows",
+        "home": "Hanshin Tigers",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "Hanshin Tigers 主勝",
+        "prob": 0.6473473868642626,
+        "edge": -0.013669562288279757,
+        "price": "-195",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Orix Buffaloes",
+        "home": "Saitama Seibu Lions",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "Saitama Seibu Lions 主勝",
+        "prob": 0.626184259815149,
+        "edge": -0.01667288304199388,
+        "price": "-180",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Chiba Lotte Marines",
+        "home": "Tohoku Rakuten Golden Eagles",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "Tohoku Rakuten Golden Eagles 主勝",
+        "prob": 0.5666290089389714,
+        "edge": -0.018433231724929056,
+        "price": "-141",
+        "result": "void"
+      }
+    ],
+    "npb_ou": [
+      {
+        "league": "NPB",
+        "type": "over",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Yomiuri Giants",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "大分 Over 5.5",
+        "prob": 0.5204412103424572,
+        "edge": -0.01659582669457993,
+        "price": "-116",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Orix Buffaloes",
+        "home": "Saitama Seibu Lions",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "小分 Under 6.5",
+        "prob": 0.5040216292731416,
+        "edge": -0.0175094712053272,
+        "price": "-109",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "over",
+        "away": "Tokyo Yakult Swallows",
+        "home": "Hanshin Tigers",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "大分 Over 6",
+        "prob": 0.5023889534648353,
+        "edge": -0.021420570344688583,
+        "price": "-110",
+        "result": "void"
+      }
+    ],
+    "npb_sp": [
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Yomiuri Giants",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "Hiroshima Toyo Carp +1.5",
+        "prob": 0.6708573893581964,
+        "edge": -0.010671273062185738,
+        "price": "-214",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Chiba Lotte Marines",
+        "home": "Tohoku Rakuten Golden Eagles",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "Chiba Lotte Marines +1.5",
+        "prob": 0.6140108516884676,
+        "edge": -0.015618777941162065,
+        "price": "-170",
+        "result": "void"
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Orix Buffaloes",
+        "home": "Saitama Seibu Lions",
+        "start": "2026-09-29T09:00:00Z",
+        "pick": "Orix Buffaloes +1.5",
+        "prob": 0.5663741841775816,
+        "edge": -0.009897002263096422,
+        "price": "-136",
+        "result": "void"
+      }
+    ]
+  }
+}

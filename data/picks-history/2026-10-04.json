@@ -1,0 +1,309 @@
+{
+  "date": "2026-10-04",
+  "recordedAt": "2026-10-03T23:24:27.856Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [
+      {
+        "league": "MLB",
+        "type": "p1nrfi",
+        "away": "San Diego Padres",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-04T00:30:00Z",
+        "pick": "NRFI 首局雙方皆不得分(先發 ERA 版)",
+        "prob": 0.5232071684444165,
+        "edge": -0.05306401799626148,
+        "price": "-136(FanDuel)",
+        "result": null
+      }
+    ],
+    "mlb_fiw": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "San Diego Padres",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-04T00:30:00Z",
+        "pick": "大分 Over 7",
+        "prob": 0.638745791653275,
+        "edge": 0.13625822946422028,
+        "price": "-101",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "San Diego Padres",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-04T00:30:00Z",
+        "pick": "San Diego Padres +1.5",
+        "prob": 0.5049439365563924,
+        "edge": -0.040510608898153055,
+        "price": "-120",
+        "result": null
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "San Diego Padres",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-04T00:30:00Z",
+        "pick": "Milwaukee Brewers 主勝",
+        "prob": 0.6317322345151525,
+        "edge": 0.10792271070562864,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "San Diego Padres",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-04T00:30:00Z",
+        "pick": "Milwaukee Brewers 主勝",
+        "prob": 0.6317322345151525,
+        "edge": 0.10792271070562864,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "Lotte Giants",
+        "home": "KT Wiz",
+        "start": "2026-10-04T08:00:00Z",
+        "pick": "KT Wiz 主勝",
+        "prob": 0.656519036921953,
+        "edge": -0.026020645617729543,
+        "price": "-215",
+        "result": null
+      },
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "Doosan Bears",
+        "home": "Samsung Lions",
+        "start": "2026-10-04T05:00:00Z",
+        "pick": "Samsung Lions 主勝",
+        "prob": 0.5437057310817243,
+        "edge": -0.011849824473831316,
+        "price": "-125",
+        "result": null
+      },
+      {
+        "league": "KBO",
+        "type": "ml",
+        "away": "Kia Tigers",
+        "home": "LG Twins",
+        "start": "2026-10-04T05:00:00Z",
+        "pick": "LG Twins 主勝",
+        "prob": 0.5415017366140997,
+        "edge": -0.014053818941455853,
+        "price": "-125",
+        "result": null
+      }
+    ],
+    "kbo_ou": [
+      {
+        "league": "KBO",
+        "type": "over",
+        "away": "Lotte Giants",
+        "home": "KT Wiz",
+        "start": "2026-10-04T08:00:00Z",
+        "pick": "大分 Over 9.5",
+        "prob": 0.5111562375118657,
+        "edge": -0.023727483418366835,
+        "price": "-115",
+        "result": null
+      },
+      {
+        "league": "KBO",
+        "type": "under",
+        "away": "Kiwoom Heroes",
+        "home": "Hanwha Eagles",
+        "start": "2026-10-04T05:00:00Z",
+        "pick": "小分 Under 10",
+        "prob": 0.5110905804836785,
+        "edge": -0.023793140446554006,
+        "price": "-115",
+        "result": null
+      },
+      {
+        "league": "KBO",
+        "type": "over",
+        "away": "Doosan Bears",
+        "home": "Samsung Lions",
+        "start": "2026-10-04T05:00:00Z",
+        "pick": "大分 Over 9",
+        "prob": 0.5104377691382298,
+        "edge": -0.013371754671294034,
+        "price": "-110",
+        "result": null
+      }
+    ],
+    "kbo_sp": [
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "SSG Landers",
+        "home": "NC Dinos",
+        "start": "2026-10-04T05:00:00Z",
+        "pick": "SSG Landers +1.5",
+        "prob": 0.6219943875313609,
+        "edge": -0.014369248832275416,
+        "price": "-175",
+        "result": null
+      },
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "Doosan Bears",
+        "home": "Samsung Lions",
+        "start": "2026-10-04T05:00:00Z",
+        "pick": "Doosan Bears +1.5",
+        "prob": 0.6142902502529173,
+        "edge": -0.01533937937671237,
+        "price": "-170",
+        "result": null
+      },
+      {
+        "league": "KBO",
+        "type": "spread",
+        "away": "Kia Tigers",
+        "home": "LG Twins",
+        "start": "2026-10-04T05:00:00Z",
+        "pick": "Kia Tigers +1.5",
+        "prob": 0.6070135358499851,
+        "edge": -0.008371079534630343,
+        "price": "-160",
+        "result": null
+      }
+    ],
+    "npb_ml": [
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "Hiroshima Toyo Carp 客勝",
+        "prob": 0.586206489426708,
+        "edge": -0.021636647828193856,
+        "price": "-155",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Hanshin Tigers",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "Yokohama DeNA BayStars 主勝",
+        "prob": 0.5219358229975875,
+        "edge": -0.023518722456957963,
+        "price": "-120",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Tohoku Rakuten Golden Eagles",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "Tohoku Rakuten Golden Eagles 客勝",
+        "prob": 0.5142333455370793,
+        "edge": -0.01847693483675239,
+        "price": "-114",
+        "result": null
+      }
+    ],
+    "npb_ou": [
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Hanshin Tigers",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "小分 Under 7.5",
+        "prob": 0.5159697723472298,
+        "edge": -0.01891394858300266,
+        "price": "-115",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Tohoku Rakuten Golden Eagles",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "小分 Under 7.5",
+        "prob": 0.5118549087564581,
+        "edge": -0.01195461505306572,
+        "price": "-110",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "小分 Under 6.5",
+        "prob": 0.5092256929849817,
+        "edge": -0.014583830824542177,
+        "price": "-110",
+        "result": null
+      }
+    ],
+    "npb_sp": [
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Hanshin Tigers",
+        "home": "Yokohama DeNA BayStars",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "Yokohama DeNA BayStars +1.5",
+        "prob": 0.644863734926423,
+        "edge": -0.025103261773246954,
+        "price": "-203",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Tohoku Rakuten Golden Eagles",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "Chiba Lotte Marines +1.5",
+        "prob": 0.6128199961422715,
+        "edge": -0.0168096334873582,
+        "price": "-170",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Hiroshima Toyo Carp",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-10-04T09:00:00Z",
+        "pick": "Tokyo Yakult Swallows +1.5",
+        "prob": 0.5650485600780522,
+        "edge": -0.018284773255281217,
+        "price": "-140",
+        "result": null
+      }
+    ]
+  }
+}

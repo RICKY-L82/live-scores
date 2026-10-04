@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-02",
+  "recordedAt": "2026-10-02T00:17:25.421Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Fukuoka SoftBank Hawks",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-10-02T09:00:00Z",
+        "pick": "Fukuoka SoftBank Hawks 客勝",
+        "prob": 0.6232157683557635,
+        "edge": -0.01964137450137937,
+        "price": "-180",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "ml",
+        "away": "Yomiuri Giants",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-10-02T09:00:00Z",
+        "pick": "Yomiuri Giants 客勝",
+        "prob": 0.5436746079772494,
+        "edge": -0.019644169315326976,
+        "price": "-129",
+        "result": null
+      }
+    ],
+    "npb_ou": [
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Yomiuri Giants",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-10-02T09:00:00Z",
+        "pick": "小分 Under 6.5",
+        "prob": 0.5092045184552084,
+        "edge": 0.0018153558936320202,
+        "price": "-103",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "under",
+        "away": "Fukuoka SoftBank Hawks",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-10-02T09:00:00Z",
+        "pick": "小分 Under 8",
+        "prob": 0.5083212501478958,
+        "edge": -0.02438903022593597,
+        "price": "-114",
+        "result": null
+      }
+    ],
+    "npb_sp": [
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Yomiuri Giants",
+        "home": "Tokyo Yakult Swallows",
+        "start": "2026-10-02T09:00:00Z",
+        "pick": "Tokyo Yakult Swallows +1.5",
+        "prob": 0.6003949934842755,
+        "edge": -0.014989621900339922,
+        "price": "-160",
+        "result": null
+      },
+      {
+        "league": "NPB",
+        "type": "spread",
+        "away": "Fukuoka SoftBank Hawks",
+        "home": "Chiba Lotte Marines",
+        "start": "2026-10-02T09:00:00Z",
+        "pick": "Chiba Lotte Marines +1.5",
+        "prob": 0.5034578059328265,
+        "edge": -0.008737316018393004,
+        "price": "-105",
+        "result": null
+      }
+    ]
+  }
+}
