@@ -208,19 +208,7 @@ body {
   border-radius: 999px;
   letter-spacing: 0.3px;
 }
-.status-pill.live { background: var(--live-bg); color: var(--live); }
-.status-pill.final { background: var(--final-bg); color: var(--text-dim); }
 .status-pill.scheduled { background: var(--scheduled-bg); color: var(--accent); }
-
-.live-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--live);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
-}
 
 .game-detail { font-size: 12px; color: var(--text-faint); }
 
@@ -244,16 +232,12 @@ body {
   text-overflow: ellipsis;
   color: var(--text-dim);
 }
-.team-row.winner .team-name { color: var(--text); font-weight: 700; }
 .team-score {
-  font-size: 17px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-dim);
+  font-size: 11px;
+  color: var(--text-faint);
   min-width: 24px;
   text-align: right;
 }
-.team-row.winner .team-score { color: var(--text); }
 
 .empty-state, .error-state {
   padding: 24px;
@@ -333,14 +317,6 @@ body {
   opacity: 0.75;
 }
 .predict-empty { color: var(--text-faint); opacity: 0.7; }
-
-/* Score change flash */
-@keyframes score-flash {
-  0% { background: var(--live-bg); }
-  100% { background: transparent; }
-}
-.game-card.flash { animation: score-flash 2.5s ease-out; }
-.game-card.flash .team-score { color: var(--live); }
 
 /* Pin button */
 .pin-btn {

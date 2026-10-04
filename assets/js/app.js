@@ -11,11 +11,9 @@
   var state = {
     date: new Date(),
     filter: "all",
-    notify: false,
     gamesByLeague: { mlb: [], nba: [], wnba: [] },
     errorByLeague: { mlb: null, nba: null, wnba: null },
     loading: true,
-    changedIds: [],
     lastUpdatedStr: null,
   };
 
@@ -459,40 +457,22 @@
       (data.dates || []).forEach(function (d) {
         (d.games || []).forEach(function (g) {
           var status = g.status || {};
-          var linescore = g.linescore || {};
-          var cat = "scheduled";
-          if (status.abstractGameState === "Live") cat = "live";
-          else if (status.abstractGameState === "Final") cat = "final";
-          else if (/Postponed|Suspended|Cancelled/i.test(status.detailedState || "")) cat = "postponed";
-
-          var detail;
-          if (cat === "live") {
-            var half = linescore.isTopInning ? "上" : "下";
-            detail = (linescore.currentInning ? linescore.currentInning + "局" + half : status.detailedState);
-          } else if (cat === "scheduled") {
-            detail = formatTime(g.gameDate);
-          } else {
-            detail = status.detailedState || "";
-          }
-
+          if (status.abstractGameState !== "Preview" || /Postponed|Suspended|Cancelled/i.test(status.detailedState || "")) return;
           var awayName = g.teams.away.team.name;
           var homeName = g.teams.home.team.name;
           games.push({
             id: "mlb-" + g.gamePk,
             league: "mlb",
             gamePk: g.gamePk,
-            status: cat,
-            detail: detail,
+            detail: formatTime(g.gameDate),
             startTime: g.gameDate,
             odds: oddsMap[awayName + "|" + homeName] || null,
             away: {
               name: awayName,
-              score: g.teams.away.score,
               logo: "https://www.mlbstatic.com/team-logos/" + g.teams.away.team.id + ".svg",
             },
             home: {
               name: homeName,
-              score: g.teams.home.score,
               logo: "https://www.mlbstatic.com/team-logos/" + g.teams.home.team.id + ".svg",
             },
           });
@@ -506,34 +486,22 @@
     var ymd = dateStr.replace(/-/g, "");
     var url = "https://site.api.espn.com/apis/site/v2/sports/basketball/" + leagueKey + "/scoreboard?dates=" + ymd;
     return fetchJson(url).then(function (data) {
-      return (data.events || []).map(function (ev) {
+      return (data.events || []).filter(function (ev) {
+        var t = ev.competitions[0].status.type || {};
+        return t.state === "pre" && !/postponed|cancel/i.test(t.name || "");
+      }).map(function (ev) {
         var comp = ev.competitions[0];
         var home = comp.competitors.find(function (c) { return c.homeAway === "home"; });
         var away = comp.competitors.find(function (c) { return c.homeAway === "away"; });
-        var statusType = comp.status.type || {};
-        var cat = "scheduled";
-        if (statusType.state === "in") cat = "live";
-        else if (statusType.state === "post") cat = "final";
-
-        var detail;
-        if (cat === "live") {
-          detail = (comp.status.period ? "第" + comp.status.period + "節 " : "") + (comp.status.displayClock || "");
-        } else if (cat === "scheduled") {
-          detail = formatTime(ev.date);
-        } else {
-          detail = statusType.shortDetail || "已完賽";
-        }
-
         return {
           id: leagueKey + "-" + ev.id,
           league: leagueKey,
           espnId: ev.id,
-          status: cat,
-          detail: detail,
+          detail: formatTime(ev.date),
           startTime: ev.date,
           odds: extractEspnOdds(comp.odds),
-          away: { name: away.team.displayName, score: away.score, logo: away.team.logo },
-          home: { name: home.team.displayName, score: home.score, logo: home.team.logo },
+          away: { name: away.team.displayName, logo: away.team.logo },
+          home: { name: home.team.displayName, logo: home.team.logo },
         };
       });
     });
@@ -545,49 +513,22 @@
     wnba: function (d) { return fetchEspnBasketball("wnba", d); },
   };
 
-  // ---------- notifications ----------
-  function canNotify() {
-    return typeof Notification !== "undefined" && Notification.permission === "granted";
-  }
-  function notifyChange(game, isFinal) {
-    if (!state.notify || !canNotify()) return;
-    try {
-      new Notification(LEAGUES[game.league].label + (isFinal ? " 比賽結束" : " 比分變動"), {
-        body: game.away.name + " " + scoreText(game.away.score) + " : " +
-              scoreText(game.home.score) + " " + game.home.name + "(" + (game.detail || "") + ")",
-        tag: game.id,
-      });
-    } catch (e) {}
-  }
-
   // ---------- load ----------
+  // pre-game analysis only: games that have started, finished or been
+  // postponed are dropped
+  function sortGames(games) {
+    games.sort(function (a, b) {
+      var pa = pinSet.has(a.id) ? 0 : 1, pb = pinSet.has(b.id) ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return new Date(a.startTime) - new Date(b.startTime);
+    });
+  }
   function loadLeague(key) {
     var dateStr = usDateStrFor(state.date);
-    var prev = {};
-    state.gamesByLeague[key].forEach(function (g) { prev[g.id] = g; });
-
     return FETCHERS[key](dateStr)
       .then(function (games) {
-        games.sort(function (a, b) {
-          var pa = pinSet.has(a.id) ? 0 : 1, pb = pinSet.has(b.id) ? 0 : 1;
-          if (pa !== pb) return pa - pb;
-          var order = { live: 0, scheduled: 1, final: 2, postponed: 3 };
-          if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
-          return new Date(a.startTime) - new Date(b.startTime);
-        });
-
-        games.forEach(function (g) {
-          var old = prev[g.id];
-          if (old && (String(old.away.score) !== String(g.away.score) || String(old.home.score) !== String(g.home.score))) {
-            state.changedIds.push(g.id);
-            notifyChange(g, false);
-          } else if (old && old.status === "live" && g.status === "final") {
-            state.changedIds.push(g.id);
-            notifyChange(g, true);
-          }
-          recordOdds(g);
-        });
-
+        sortGames(games);
+        games.forEach(recordOdds);
         state.gamesByLeague[key] = games;
         state.errorByLeague[key] = null;
       })
@@ -624,7 +565,10 @@
     try {
       var snap = JSON.parse(store.get("snap"));
       if (snap && snap.date === toISODate(new Date()) && snap.data) {
-        state.gamesByLeague = snap.data;
+        var now = Date.now();
+        LEAGUE_ORDER.forEach(function (k) {
+          state.gamesByLeague[k] = (snap.data[k] || []).filter(function (g) { return new Date(g.startTime).getTime() > now; });
+        });
         state.loading = false;
         return true;
       }
@@ -646,49 +590,29 @@
     return '<span class="team-logo-fallback"></span>';
   }
 
-  function scoreText(score) {
-    return score === null || score === undefined ? "-" : String(score);
-  }
-
   function gameCardHtml(game, color) {
-    var homeWin = game.status === "final" && game.home.score !== null && game.away.score !== null && Number(game.home.score) > Number(game.away.score);
-    var awayWin = game.status === "final" && game.home.score !== null && game.away.score !== null && Number(game.away.score) > Number(game.home.score);
-
-    var statusHtml;
-    if (game.status === "live") {
-      statusHtml = '<span class="status-pill live"><span class="live-dot"></span>LIVE</span>';
-    } else if (game.status === "final") {
-      statusHtml = '<span class="status-pill final">已完賽</span>';
-    } else if (game.status === "postponed") {
-      statusHtml = '<span class="status-pill final">延賽</span>';
-    } else {
-      statusHtml = '<span class="status-pill scheduled">未開始</span>';
-    }
-
     var pinned = pinSet.has(game.id);
     var pinBtn = '<button class="pin-btn' + (pinned ? " pinned" : "") + '" data-pin="' + esc(game.id) + '" title="釘選置頂">' + (pinned ? "★" : "☆") + '</button>';
 
     var oddsHtml = "";
-    if (game.odds && game.status === "scheduled") {
+    if (game.odds) {
       var sum = oddsSummary(game.odds);
       var badge = oddsMoveBadge(game.odds);
       if (sum || badge) oddsHtml = '<div class="odds-row">' + sum + badge + '</div>';
     }
 
-    var predictHtml = game.status === "scheduled"
-      ? '<div class="predict-block" id="predict-' + esc(game.id) + '"><div class="predict-empty">模型計算中…</div></div>'
-      : "";
+    var predictHtml = '<div class="predict-block" id="predict-' + esc(game.id) + '"><div class="predict-empty">模型計算中…</div></div>';
 
     return (
       '<div class="game-card clickable" data-gid="' + esc(game.id) + '" style="--league-color:' + color + '">' +
-        '<div class="game-status-row"><span class="status-left">' + pinBtn + statusHtml + '</span><span class="game-detail">' + esc(game.detail || "") + '</span></div>' +
-        '<div class="team-row' + (awayWin ? " winner" : "") + '">' +
+        '<div class="game-status-row"><span class="status-left">' + pinBtn + statusPillHtml(game) + '</span><span class="game-detail">' + esc(game.detail || "") + '</span></div>' +
+        '<div class="team-row">' +
           '<div class="team-info">' + teamLogoHtml(game.away) + '<span class="team-name">' + esc(game.away.name) + '</span></div>' +
-          '<span class="team-score">' + esc(scoreText(game.away.score)) + '</span>' +
+          '<span class="team-score">客</span>' +
         '</div>' +
-        '<div class="team-row' + (homeWin ? " winner" : "") + '">' +
+        '<div class="team-row">' +
           '<div class="team-info">' + teamLogoHtml(game.home) + '<span class="team-name">' + esc(game.home.name) + '</span></div>' +
-          '<span class="team-score">' + esc(scoreText(game.home.score)) + '</span>' +
+          '<span class="team-score">主</span>' +
         '</div>' +
         oddsHtml +
         predictHtml +
@@ -714,7 +638,7 @@
     } else if (showLoading) {
       body = '<div class="game-grid">' + skeletonHtml() + '</div>';
     } else if (games.length === 0) {
-      body = '<div class="empty-state">這天沒有賽事</div>';
+      body = '<div class="empty-state">這天沒有未開賽的賽事</div>';
     } else {
       body = '<div class="game-grid">' + games.map(function (g) { return gameCardHtml(g, league.color); }).join("") + '</div>';
     }
@@ -759,16 +683,6 @@
       });
     }
 
-    // flash score changes
-    state.changedIds.forEach(function (id) {
-      var card = container.querySelector('[data-gid="' + id + '"]');
-      if (card) {
-        card.classList.add("flash");
-        setTimeout(function () { card.classList.remove("flash"); }, 2600);
-      }
-    });
-    state.changedIds = [];
-
     document.getElementById("dateLabel").textContent = formatDateLabel(state.date);
   }
 
@@ -786,11 +700,8 @@
     return null;
   }
 
-  function statusPillHtml(game) {
-    if (game.status === "live") return '<span class="status-pill live"><span class="live-dot"></span>LIVE</span>';
-    if (game.status === "final") return '<span class="status-pill final">已完賽</span>';
-    if (game.status === "postponed") return '<span class="status-pill final">延賽</span>';
-    return '<span class="status-pill scheduled">未開始</span>';
+  function statusPillHtml() {
+    return '<span class="status-pill scheduled">賽前</span>';
   }
 
   function detailHeaderHtml(game, awaySub, homeSub) {
@@ -801,13 +712,7 @@
         (sub ? '<span class="sub">' + esc(sub) + '</span>' : "") +
         '</div>';
     }
-    var scoreHtml;
-    if (game.status === "scheduled" || game.status === "postponed") {
-      scoreHtml = '<div class="detail-score"><span class="sep">vs</span></div>';
-    } else {
-      scoreHtml = '<div class="detail-score">' + esc(scoreText(game.away.score)) +
-        '<span class="sep">:</span>' + esc(scoreText(game.home.score)) + '</div>';
-    }
+    var scoreHtml = '<div class="detail-score"><span class="sep">vs</span></div>';
     return (
       '<div class="detail-header">' +
         '<span class="detail-league">' + LEAGUES[game.league].label + '</span>' +
@@ -1845,7 +1750,6 @@
     LEAGUE_ORDER.forEach(function (key) {
       var fn = PREDICT_FETCHERS[key];
       (state.gamesByLeague[key] || []).forEach(function (game) {
-        if (game.status !== "scheduled") return;
         fn(game).then(function (pred) {
           var el = document.getElementById("predict-" + game.id);
           if (el) el.innerHTML = predictBlockHtml(pred);
@@ -2427,7 +2331,7 @@
     }
 
     if (!html) {
-      html = sectionBlock("賽前資訊", '<div class="analysis-box"><p>暫無更多賽前資料,開賽後將顯示逐節比分與球員數據。</p></div>');
+      html = sectionBlock("賽前資訊", '<div class="analysis-box"><p>暫無更多賽前資料。</p></div>');
     }
     return html;
   }
@@ -2485,6 +2389,7 @@
   function shiftDate(days) {
     var d = new Date(state.date);
     d.setDate(d.getDate() + days);
+    if (toISODate(d) < toISODate(new Date())) return; // past days have no pre-game slate
     state.date = d;
     clearGames();
     loadAll();
@@ -2500,12 +2405,6 @@
     state.errorByLeague[key] = null;
     render();
     loadLeague(key).then(function () { render(); });
-  }
-
-  function setNotifyButton() {
-    var btn = document.getElementById("notifBtn");
-    btn.textContent = state.notify ? "🔔" : "🔕";
-    btn.title = state.notify ? "比分變動通知:開啟(點擊關閉)" : "比分變動通知:關閉(點擊開啟)";
   }
 
   function init() {
@@ -2525,20 +2424,6 @@
         if (b) b.classList.remove("spinning");
       });
     });
-    document.getElementById("notifBtn").addEventListener("click", function () {
-      if (state.notify) {
-        state.notify = false;
-        store.set("notif", "0");
-        setNotifyButton();
-        return;
-      }
-      if (typeof Notification === "undefined") return;
-      Notification.requestPermission().then(function (p) {
-        state.notify = p === "granted";
-        store.set("notif", state.notify ? "1" : "0");
-        setNotifyButton();
-      });
-    });
     document.getElementById("themeBtn").addEventListener("click", function () {
       var root = document.documentElement;
       var current = root.getAttribute("data-theme") ||
@@ -2554,15 +2439,7 @@
       var pin = e.target.closest(".pin-btn");
       if (pin) {
         togglePin(pin.dataset.pin);
-        LEAGUE_ORDER.forEach(function (k) {
-          state.gamesByLeague[k].sort(function (a, b) {
-            var pa = pinSet.has(a.id) ? 0 : 1, pb = pinSet.has(b.id) ? 0 : 1;
-            if (pa !== pb) return pa - pb;
-            var order = { live: 0, scheduled: 1, final: 2, postponed: 3 };
-            if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
-            return new Date(a.startTime) - new Date(b.startTime);
-          });
-        });
+        LEAGUE_ORDER.forEach(function (k) { sortGames(state.gamesByLeague[k]); });
         render();
         return;
       }
@@ -2583,8 +2460,6 @@
       document.documentElement.setAttribute("data-theme", savedTheme);
       document.getElementById("themeBtn").textContent = savedTheme === "dark" ? "🌙" : "☀️";
     }
-    state.notify = store.get("notif") === "1" && canNotify();
-    setNotifyButton();
 
     window.__scoreApp = {
       retryLeague: retryLeague,
