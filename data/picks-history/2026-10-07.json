@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-07",
+  "recordedAt": "2026-10-07T00:12:46.051Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [
+      {
+        "league": "MLB",
+        "type": "p1yrfi",
+        "away": "Milwaukee Brewers",
+        "home": "San Diego Padres",
+        "start": "2026-10-07T01:30:00Z",
+        "pick": "YRFI 首局至少一方得分(先發 ERA 版)",
+        "prob": 0.6920376604822762,
+        "edge": 0.19203766048227622,
+        "price": "100(FanDuel)",
+        "result": null
+      }
+    ],
+    "mlb_fiw": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "over",
+        "away": "Milwaukee Brewers",
+        "home": "San Diego Padres",
+        "start": "2026-10-07T01:30:00Z",
+        "pick": "大分 Over 7.5",
+        "prob": 0.52190884197769,
+        "edge": 0.012104920409062636,
+        "price": "-104",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Milwaukee Brewers",
+        "home": "San Diego Padres",
+        "start": "2026-10-07T01:30:00Z",
+        "pick": "Milwaukee Brewers +1.5",
+        "prob": 0.6119782843878104,
+        "edge": -0.03087885846933247,
+        "price": "-180",
+        "result": null
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Milwaukee Brewers",
+        "home": "San Diego Padres",
+        "start": "2026-10-07T01:30:00Z",
+        "pick": "San Diego Padres 主勝",
+        "prob": 0.5256575959933222,
+        "edge": -0.039340057520991456,
+        "price": "-141(運彩換算)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Milwaukee Brewers",
+        "home": "San Diego Padres",
+        "start": "2026-10-07T01:30:00Z",
+        "pick": "San Diego Padres 主勝",
+        "prob": 0.5256575959933222,
+        "edge": -0.039340057520991456,
+        "price": "-141(運彩換算)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
