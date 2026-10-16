@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-16",
+  "recordedAt": "2026-10-15T23:21:28.576Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "nrfi",
+        "away": "Milwaukee Brewers",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-16T00:00:00Z",
+        "pick": "NRFI 首局雙方皆不得分",
+        "prob": 0.5939525959951599,
+        "edge": 0.028735204690812144,
+        "price": "-130(BetMGM)",
+        "result": null
+      }
+    ],
+    "mlb_p1era": [
+      {
+        "league": "MLB",
+        "type": "p1nrfi",
+        "away": "Milwaukee Brewers",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-16T00:00:00Z",
+        "pick": "NRFI 首局雙方皆不得分(先發 ERA 版)",
+        "prob": 0.5232071684444165,
+        "edge": -0.04201022285993128,
+        "price": "-130(BetMGM)",
+        "result": null
+      }
+    ],
+    "mlb_fiw": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "under",
+        "away": "Milwaukee Brewers",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-16T00:00:00Z",
+        "pick": "小分 Under 8",
+        "prob": 0.7132235874133733,
+        "edge": 0.1827071554884907,
+        "price": "-113",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Milwaukee Brewers",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-16T00:00:00Z",
+        "pick": "Milwaukee Brewers +1.5",
+        "prob": 0.6119628693286908,
+        "edge": -0.007808993789179874,
+        "price": "-163",
+        "result": null
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Milwaukee Brewers",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-16T00:00:00Z",
+        "pick": "Los Angeles Dodgers 主勝",
+        "prob": 0.5256736142934377,
+        "edge": -0.05350502352978348,
+        "price": "-149(運彩換算)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Milwaukee Brewers",
+        "home": "Los Angeles Dodgers",
+        "start": "2026-10-16T00:00:00Z",
+        "pick": "Los Angeles Dodgers 主勝",
+        "prob": 0.5256736142934377,
+        "edge": -0.05350502352978348,
+        "price": "-149(運彩換算)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "kbo_ml": [],
+    "kbo_ou": [],
+    "kbo_sp": [],
+    "npb_ml": [],
+    "npb_ou": [],
+    "npb_sp": []
+  }
+}
