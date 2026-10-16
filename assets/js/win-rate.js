@@ -15,12 +15,6 @@
     nba_sp: "🏀 NBA 讓分 Spread",
     nba_ou: "🏀 NBA 大小分 Over/Under",
     nba_h1: "🏀 NBA 上半場大小分",
-    kbo_ml: "🇰🇷 KBO 獨贏勝率",
-    kbo_ou: "🇰🇷 KBO 大小分 Over/Under",
-    kbo_sp: "🇰🇷 KBO 讓分 Run Line",
-    npb_ml: "🇯🇵 NPB 獨贏勝率",
-    npb_ou: "🇯🇵 NPB 大小分 Over/Under",
-    npb_sp: "🇯🇵 NPB 讓分 Run Line",
   };
 
   function esc(s) {

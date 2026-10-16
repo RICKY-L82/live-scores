@@ -27,12 +27,9 @@
     wnba_ou: "🏀 WNBA 大小分 Over/Under",
     wnba_sp: "🏀 WNBA 讓分 Spread",
     nba_ml: "🏀 NBA 獨贏勝率",
-    kbo_ml: "🇰🇷 KBO 獨贏勝率",
-    kbo_ou: "🇰🇷 KBO 大小分 Over/Under",
-    kbo_sp: "🇰🇷 KBO 讓分 Run Line",
-    npb_ml: "🇯🇵 NPB 獨贏勝率",
-    npb_ou: "🇯🇵 NPB 大小分 Over/Under",
-    npb_sp: "🇯🇵 NPB 讓分 Run Line",
+    nba_sp: "🏀 NBA 讓分 Spread",
+    nba_ou: "🏀 NBA 大小分 Over/Under",
+    nba_h1: "🏀 NBA 上半場大小分",
   };
 
   // ---------- helpers (mirrors assets/js/app.js) ----------
@@ -2828,7 +2825,6 @@
       window.__picksSections = {
         mlb_fi: [], mlb_p1era: [], mlb_fiw: [], mlb_ou: [], mlb_sp: [], mlb_ml: [], mlb_ml_edge: [],
         wnba_ou: [], wnba_sp: [], nba_ml: [], nba_sp: [], nba_ou: [], nba_h1: [],
-        kbo_ml: [], kbo_ou: [], kbo_sp: [], npb_ml: [], npb_ou: [], npb_sp: [],
       };
       window.__picksReady = true;
       return;
@@ -2878,8 +2874,6 @@
       mlb_ml: slim(mlMlb), mlb_ml_edge: slim(mlMlbByEdge),
       wnba_ou: slim(ouWnba), wnba_sp: slim(spWnba),
       nba_ml: slim(mlNba), nba_sp: slim(spNba), nba_ou: slim(ouNba), nba_h1: slim(h1Nba),
-      kbo_ml: slim(mlKbo), kbo_ou: slim(ouKbo), kbo_sp: slim(spKbo),
-      npb_ml: slim(mlNpb), npb_ou: slim(ouNpb), npb_sp: slim(spNpb),
     };
     window.__picksReady = true;
     var mainHtml =

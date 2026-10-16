@@ -121,38 +121,20 @@
       "week": null,
       "month": null
     },
-    "kbo_ml": {
-      "label": "🇰🇷 KBO 獨贏勝率",
+    "nba_sp": {
+      "label": "🏀 NBA 讓分 Spread",
       "day": null,
       "week": null,
       "month": null
     },
-    "kbo_ou": {
-      "label": "🇰🇷 KBO 大小分 Over/Under",
+    "nba_ou": {
+      "label": "🏀 NBA 大小分 Over/Under",
       "day": null,
       "week": null,
       "month": null
     },
-    "kbo_sp": {
-      "label": "🇰🇷 KBO 讓分 Run Line",
-      "day": null,
-      "week": null,
-      "month": null
-    },
-    "npb_ml": {
-      "label": "🇯🇵 NPB 獨贏勝率",
-      "day": null,
-      "week": null,
-      "month": null
-    },
-    "npb_ou": {
-      "label": "🇯🇵 NPB 大小分 Over/Under",
-      "day": null,
-      "week": null,
-      "month": null
-    },
-    "npb_sp": {
-      "label": "🇯🇵 NPB 讓分 Run Line",
+    "nba_h1": {
+      "label": "🏀 NBA 上半場大小分",
       "day": null,
       "week": null,
       "month": null
