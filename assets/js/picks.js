@@ -3024,8 +3024,16 @@
     var sp = nbaRank(candidates.filter(function (c) { return c.type === "spread"; }));
     var ou = nbaRank(candidates.filter(function (c) { return c.type === "over" || c.type === "under"; }));
     var h1 = nbaRank(candidates.filter(function (c) { return c.type === "h1over" || c.type === "h1under"; }));
+    var games = {};
+    candidates.forEach(function (c) { games[c.away + "|" + c.home + "|" + c.start] = 1; });
     return {
       empty: !ml.length && !sp.length && !ou.length && !h1.length,
+      // games were analyzed but every pick fell below NBA_MIN_EDGE — say so
+      // instead of the generic "no games" message
+      filteredNote: candidates.length
+        ? "今天有 " + Object.keys(games).length + " 場未開賽、共分析 " + candidates.length +
+          " 個盤口,但沒有任何一個優勢達到 " + (NBA_MIN_EDGE * 100) + "% 門檻(模型已依回測大幅向市場收斂),所以不列推薦。"
+        : null,
       html: leagueSectionHtml("🏀", "NBA", ml.length + sp.length + ou.length + h1.length, nbaSectionsHtml(ml, sp, ou, h1)),
       sections: { nba_ml: slimPicks(ml), nba_sp: slimPicks(sp), nba_ou: slimPicks(ou), nba_h1: slimPicks(h1) },
     };
@@ -3100,7 +3108,9 @@
   function showLeagueBlock(key, block) {
     document.getElementById("picksContent").innerHTML = oddsKeyLinkHtml() +
       (block.empty
-        ? '<div class="empty-state">' + esc(TAB_LEAGUES[key].label) + ' 今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。</div>'
+        ? '<div class="empty-state">' + esc(TAB_LEAGUES[key].label) + ' ' + (block.filteredNote
+            ? esc(block.filteredNote)
+            : '今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。') + '</div>'
         : block.html);
     wireOddsKeyLink();
     document.getElementById("updatedAt").textContent = "計算於 " + new Date().toLocaleTimeString("zh-TW", { hour12: false });
