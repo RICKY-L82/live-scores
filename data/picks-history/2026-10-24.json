@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-24",
+  "recordedAt": "2026-10-23T23:36:17.099Z",
+  "sections": {
+    "mlb_fi": [
+      {
+        "league": "MLB",
+        "type": "nrfi",
+        "away": "Tampa Bay Rays",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-24T00:00:00Z",
+        "pick": "NRFI 首局雙方皆不得分",
+        "prob": 0.6246543929758117,
+        "edge": 0.006333782288788781,
+        "price": "-162(FanDuel)",
+        "result": null
+      }
+    ],
+    "mlb_p1era": [
+      {
+        "league": "MLB",
+        "type": "p1nrfi",
+        "away": "Tampa Bay Rays",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-24T00:00:00Z",
+        "pick": "NRFI 首局雙方皆不得分(先發 ERA 版)",
+        "prob": 0.631283645506926,
+        "edge": 0.012963034819903019,
+        "price": "-162(FanDuel)",
+        "result": null
+      }
+    ],
+    "mlb_fiw": [],
+    "mlb_ou": [
+      {
+        "league": "MLB",
+        "type": "under",
+        "away": "Tampa Bay Rays",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-24T00:00:00Z",
+        "pick": "小分 Under 6.5",
+        "prob": 0.5893292577798028,
+        "edge": 0.08932925777980283,
+        "price": "100",
+        "result": null
+      }
+    ],
+    "mlb_sp": [
+      {
+        "league": "MLB",
+        "type": "spread",
+        "away": "Tampa Bay Rays",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-24T00:00:00Z",
+        "pick": "Milwaukee Brewers -1.5",
+        "prob": 0.577379801245116,
+        "edge": 0.1349019251389213,
+        "price": "126",
+        "result": null
+      }
+    ],
+    "mlb_ml": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-24T00:00:00Z",
+        "pick": "Milwaukee Brewers 主勝",
+        "prob": 0.7067902126076986,
+        "edge": 0.18298068879817475,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "mlb_ml_edge": [
+      {
+        "league": "MLB",
+        "type": "ml",
+        "away": "Tampa Bay Rays",
+        "home": "Milwaukee Brewers",
+        "start": "2026-10-24T00:00:00Z",
+        "pick": "Milwaukee Brewers 主勝",
+        "prob": 0.7067902126076986,
+        "edge": 0.18298068879817475,
+        "price": "-110(參考,賠率未開)",
+        "result": null
+      }
+    ],
+    "wnba_ou": [],
+    "wnba_sp": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": []
+  }
+}
