@@ -12,6 +12,8 @@
  *   - upcoming[eventId]: schedule-fatigue features (rest, 背靠背, 4 天 3 戰,
  *     travel distance, time zones crossed, altitude) for the next two days
  *   - calib: coefficients fitted by nba-model-lib.js's backtest
+ *   - trends[id]: this season's record against the DraftKings closing
+ *     spread (過盤) and total (大小分), from data/nba/games.json
  *
  * data/nba/games.json is this script's own store of finished games
  * (quarter scores + DraftKings closing spread/total from ESPN's game
@@ -31,6 +33,7 @@ const GAMES_FILE = path.join(DIR, "games.json");
 const MIN_INTERVAL_MS = 3 * 3600000;
 const SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 const BLEND_GP = 15;  // current season gets weight gp/(gp+BLEND_GP) vs last season
+const PACE_BLEND_GP = 5;  // pace settles within a few games, so it leans on this season sooner
 const PREV_H1_WEIGHT = 0.5;
 const PLAYERS_VERSION = 2;  // bump when the per-player fields change
 const LINE_TRIES = 2;
@@ -171,9 +174,36 @@ function blend(cur, prev) {
   if (!cur && !prev) return null;
   if (!prev) return cur;
   if (!cur) return Object.assign({}, prev, { gp: 0, prevGp: prev.gp });
-  const w = cur.gp / (cur.gp + BLEND_GP);
+  const w = cur.gp / (cur.gp + BLEND_GP), wp = cur.gp / (cur.gp + PACE_BLEND_GP);
   const mix = (k) => w * cur[k] + (1 - w) * prev[k];
-  return { gp: cur.gp, prevGp: prev.gp, pace: mix("pace"), ortg: mix("ortg"), drtg: mix("drtg") };
+  return {
+    gp: cur.gp, prevGp: prev.gp, pace: wp * cur.pace + (1 - wp) * prev.pace, paceCur: cur.pace,
+    ortg: mix("ortg"), drtg: mix("drtg"),
+  };
+}
+
+// this season's results against the closing line, per team: spread from
+// the team's side (w/l/p) and the game total (o/u/p); overtime counts, as
+// it does for the book
+function lineTrends(games, season) {
+  const out = {};
+  Object.values(games).forEach((g) => {
+    if (g.season !== season || !g.ln || !isFinite(g.ln.hl) || !isFinite(g.ln.tot)) return;
+    const aPts = g.aq.reduce((x, y) => x + y, 0), hPts = g.hq.reduce((x, y) => x + y, 0);
+    const homeAts = Math.sign(hPts - aPts + g.ln.hl), ou = Math.sign(aPts + hPts - g.ln.tot);
+    [[g.home, homeAts], [g.away, -homeAts]].forEach(([t, ats]) => {
+      const r = out[t] || (out[t] = { n: 0, w: 0, l: 0, p: 0, o: 0, u: 0, op: 0, pts: 0, line: 0 });
+      r.n++;
+      r[ats > 0 ? "w" : ats < 0 ? "l" : "p"]++;
+      r[ou > 0 ? "o" : ou < 0 ? "u" : "op"]++;
+      r.pts += aPts + hPts; r.line += g.ln.tot;
+    });
+  });
+  Object.values(out).forEach((r) => {
+    r.pts = +(r.pts / r.n).toFixed(1);
+    r.line = +(r.line / r.n).toFixed(1);
+  });
+  return out;
 }
 
 // ---------- players ----------
@@ -311,6 +341,7 @@ async function playerStats(season) {
       name: names[id],
       gp: r ? r.gp : 0, prevGp: r ? r.prevGp || 0 : 0,
       pace: r ? +r.pace.toFixed(2) : null,
+      paceCur: r && r.paceCur ? +r.paceCur.toFixed(2) : null,
       ortg: r ? +r.ortg.toFixed(2) : null,
       drtg: r ? +r.drtg.toFixed(2) : null,
       h1Share: s && s.reg ? +(s.h1 / s.reg).toFixed(4) : null,
@@ -335,6 +366,7 @@ async function playerStats(season) {
     season, prevSeason: lastSeason,
     league: { pace: +avg("pace").toFixed(2), ortg: +avg("ortg").toFixed(2), h1Share: +lgShare.toFixed(4) },
     teams, players, upcoming,
+    trends: lineTrends(store.games, season),
     calib: calibrate(store.games, arenaOf, abbrOf),
     playersVersion: PLAYERS_VERSION,
     prevRatings, prevPlayers,

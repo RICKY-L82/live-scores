@@ -769,3 +769,7 @@ a.icon-btn.nav-link { text-decoration: none; }
 
 .move-badge.over { background: rgba(234, 179, 8, 0.15); color: #ca9a04; }
 .move-badge.under { background: rgba(96, 165, 250, 0.15); color: #3b82f6; }
+
+/* NBA 本季過盤/大小分統計 */
+.nba-trend-list { margin: 0 0 10px; padding-left: 22px; }
+.nba-trend-list li { margin: 2px 0; }
