@@ -1,15 +1,10 @@
 {
-  "updated": "2026-10-31T23:49:38.162Z",
+  "updated": "2026-11-01T23:58:37.602Z",
   "sections": {
     "mlb_fi": {
       "label": "⚾ MLB 首局 NRFI / YRFI",
       "day": null,
-      "week": {
-        "from": "2026-10-25",
-        "to": "2026-10-25",
-        "w": 0,
-        "l": 1
-      },
+      "week": null,
       "month": {
         "from": "2026-10-05",
         "to": "2026-10-25",
@@ -20,12 +15,7 @@
     "mlb_p1era": {
       "label": "⚾ MLB 先發首局 ERA 對決",
       "day": null,
-      "week": {
-        "from": "2026-10-25",
-        "to": "2026-10-25",
-        "w": 0,
-        "l": 1
-      },
+      "week": null,
       "month": {
         "from": "2026-10-04",
         "to": "2026-10-25",
@@ -42,12 +32,7 @@
     "mlb_ou": {
       "label": "⚾ MLB 大小分 Over/Under",
       "day": null,
-      "week": {
-        "from": "2026-10-25",
-        "to": "2026-10-25",
-        "w": 0,
-        "l": 1
-      },
+      "week": null,
       "month": {
         "from": "2026-10-04",
         "to": "2026-10-25",
@@ -58,12 +43,7 @@
     "mlb_sp": {
       "label": "⚾ MLB 讓分 Run Line",
       "day": null,
-      "week": {
-        "from": "2026-10-25",
-        "to": "2026-10-25",
-        "w": 1,
-        "l": 0
-      },
+      "week": null,
       "month": {
         "from": "2026-10-04",
         "to": "2026-10-25",
@@ -74,12 +54,7 @@
     "mlb_ml": {
       "label": "⚾ MLB 獨贏勝率",
       "day": null,
-      "week": {
-        "from": "2026-10-25",
-        "to": "2026-10-25",
-        "w": 1,
-        "l": 0
-      },
+      "week": null,
       "month": {
         "from": "2026-10-04",
         "to": "2026-10-25",
@@ -90,12 +65,7 @@
     "mlb_ml_edge": {
       "label": "⚾ MLB 獨贏優勢",
       "day": null,
-      "week": {
-        "from": "2026-10-25",
-        "to": "2026-10-25",
-        "w": 1,
-        "l": 0
-      },
+      "week": null,
       "month": {
         "from": "2026-10-04",
         "to": "2026-10-25",
