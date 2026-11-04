@@ -9,8 +9,9 @@
     mlb_sp: "⚾ MLB 讓分 Run Line",
     mlb_ml: "⚾ MLB 獨贏勝率",
     mlb_ml_edge: "⚾ MLB 獨贏優勢",
-    wnba_ou: "🏀 WNBA 大小分 Over/Under",
-    wnba_sp: "🏀 WNBA 讓分 Spread",
+    // WNBA temporarily disabled (offseason)
+    // wnba_ou: "🏀 WNBA 大小分 Over/Under",
+    // wnba_sp: "🏀 WNBA 讓分 Spread",
     nba_ml: "🏀 NBA 獨贏勝率",
     nba_sp: "🏀 NBA 讓分 Spread",
     nba_ou: "🏀 NBA 大小分 Over/Under",

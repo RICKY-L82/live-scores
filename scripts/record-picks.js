@@ -45,6 +45,27 @@ function serveStatic() {
   });
 }
 
+// From GitHub Actions, ESPN answers the headless browser without an
+// Access-Control-Allow-Origin header, so every ESPN fetch in picks.js failed
+// CORS and collectNba() came back empty — no NBA pick was ever recorded.
+// Plain Node fetch from the same runner works (scripts/collect-nba-stats.js
+// hits the same API every 20 minutes), so ESPN requests are proxied through
+// Node instead of left to the browser.
+const ESPN_URL = /^https:\/\/site(\.web)?\.api\.espn\.com\//;
+async function proxyEspn(route) {
+  try {
+    const res = await fetch(route.request().url(), { signal: AbortSignal.timeout(20000) });
+    await route.fulfill({
+      status: res.status,
+      headers: { "content-type": res.headers.get("content-type") || "application/json", "access-control-allow-origin": "*" },
+      body: Buffer.from(await res.arrayBuffer()),
+    });
+  } catch (e) {
+    console.error("[espn proxy] " + route.request().url() + ": " + e.message);
+    await route.abort();
+  }
+}
+
 // Taiwan-date "today" — matches how a visitor of this site thinks about "today's picks"
 function taipeiToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
@@ -57,6 +78,7 @@ function taipeiToday() {
   let sections;
   try {
     const page = await browser.newPage();
+    await page.route(ESPN_URL, proxyEspn);
     page.on("console", (msg) => {
       if (msg.type() === "error") console.error("[page]", msg.text());
     });

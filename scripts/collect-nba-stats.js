@@ -11,7 +11,8 @@
  *
  *   - upcoming[eventId]: schedule-fatigue features (rest, 背靠背, 4 天 3 戰,
  *     travel distance, time zones crossed, altitude) for the next two days
- *   - calib: coefficients fitted by nba-model-lib.js's backtest
+ *   - calib: coefficients fitted by nba-model-lib.js's backtest, plus
+ *     calib.deployed: market weights fitted on data/nba/proj-log.json
  *   - trends[id]: this season's record against the DraftKings closing
  *     spread (過盤) and total (大小分), from data/nba/games.json
  *
@@ -20,16 +21,22 @@
  * summary), backfilled for last season on first run and then topped up
  * from the last few days' scoreboards. Only free ESPN endpoints are used;
  * the whole run is throttled to once per MIN_INTERVAL_MS.
+ *
+ * data/nba/proj-log.json keeps, per game, the last pre-game projection of
+ * the model picks.js runs (nba-model-lib.js projectGame, with the live
+ * injury report and ESPN predictor), rewritten every run until tip-off.
  */
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
-const { ARENAS, fatigue, calibrate } = require("./nba-model-lib");
+const { ARENAS, fatigue, calibrate, projectGame, calibrateDeployed } = require("./nba-model-lib");
 
 const DIR = path.join(__dirname, "..", "data", "nba");
 const STATS_FILE = path.join(DIR, "stats.json");
 const GAMES_FILE = path.join(DIR, "games.json");
+const PROJ_LOG_FILE = path.join(DIR, "proj-log.json");
+const PROJ_LOG_KEEP_MS = 400 * 86400000;
 const MIN_INTERVAL_MS = 3 * 3600000;
 const SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 const BLEND_GP = 15;  // current season gets weight gp/(gp+BLEND_GP) vs last season
@@ -84,7 +91,8 @@ async function gamesForDate(ymd) {
   }
   return out;
 }
-// DraftKings closing line from ESPN's game summary; hl = home spread
+// DraftKings closing line from ESPN's game summary; hl = home spread,
+// ml = [away, home] moneyline (null when not posted)
 async function fetchLines(g) {
   const s = await fetchJson(SITE + "/summary?event=" + g.id);
   const pc = (s.pickcenter || []).find((p) => isFinite(Number(p.spread)) && isFinite(Number(p.overUnder)));
@@ -94,18 +102,24 @@ async function fetchLines(g) {
   const comp = s.header && s.header.competitions && s.header.competitions[0];
   const home = comp && comp.competitors.find((c) => c.homeAway === "home");
   if (m && home && home.team) hl = m[1] === home.team.abbreviation ? Number(m[2]) : -Number(m[2]);
-  return { hl, tot: Number(pc.overUnder) };
+  const mlA = pc.awayTeamOdds && Number(pc.awayTeamOdds.moneyLine), mlH = pc.homeTeamOdds && Number(pc.homeTeamOdds.moneyLine);
+  return { hl, tot: Number(pc.overUnder), ml: isFinite(mlA) && isFinite(mlH) && mlA && mlH ? [mlA, mlH] : null };
 }
-async function fillLines(store) {
-  const todo = Object.values(store.games).filter((g) => !g.ln && (g.lnTries || 0) < LINE_TRIES);
+// also revisits this season's games stored before ln.ml existed
+async function fillLines(store, season) {
+  const needsMl = (g) => g.season === season && g.ln && g.ln.ml === undefined && (g.mlTries || 0) < LINE_TRIES;
+  const todo = Object.values(store.games).filter((g) => (!g.ln && (g.lnTries || 0) < LINE_TRIES) || needsMl(g));
   let filled = 0, i = 0;
   async function worker() {
     while (i < todo.length) {
       const g = todo[i++];
-      g.lnTries = (g.lnTries || 0) + 1;
+      const mlOnly = !!g.ln;
+      if (mlOnly) g.mlTries = (g.mlTries || 0) + 1;
+      else g.lnTries = (g.lnTries || 0) + 1;
       try {
         const ln = await fetchLines(g);
-        if (ln) { g.ln = ln; filled++; }
+        if (ln && mlOnly) { if (ln.ml || g.mlTries >= LINE_TRIES) g.ln.ml = ln.ml; }
+        else if (ln) { g.ln = ln; filled++; }
       } catch (e) { /* retried next run, up to LINE_TRIES */ }
     }
   }
@@ -206,6 +220,25 @@ function lineTrends(games, season) {
   return out;
 }
 
+// live injury report, same shape picks.js's fetchNbaInjuries builds
+async function fetchInjuries() {
+  try {
+    const d = await fetchJson(SITE + "/injuries");
+    const map = {};
+    (d.injuries || []).forEach((t) => {
+      map[t.id] = (t.injuries || []).map((i) => {
+        const href = ((i.athlete && i.athlete.links) || []).map((l) => l.href || "").join(" ");
+        const m = /\/id\/(\d+)/.exec(href);
+        return { pid: m ? m[1] : null, status: i.status };
+      });
+    });
+    return map;
+  } catch (e) {
+    console.error("[nba-stats] injuries: " + e.message);
+    return {};
+  }
+}
+
 // ---------- players ----------
 async function playerStats(season) {
   const url = "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/statistics/byathlete" +
@@ -262,7 +295,7 @@ async function playerStats(season) {
   for (const id of Object.keys(store.games)) {
     if (store.games[id].season < lastSeason) delete store.games[id];
   }
-  const lines = await fillLines(store);
+  const lines = await fillLines(store, season);
 
   const teamList = await fetchJson(SITE + "/teams");
   const teamIds = teamList.sports[0].leagues[0].teams.map((t) => t.team.id);
@@ -314,7 +347,7 @@ async function playerStats(season) {
   };
 
   // fatigue features for the next two days' games
-  const upcoming = {};
+  const upcoming = {}, upcomingTeams = {};
   for (const ymd of [today, etDate(new Date(now + 86400000))]) {
     let sb;
     try { sb = await fetchJson(SITE + "/scoreboard?dates=" + ymd.replace(/-/g, "")); } catch (e) { continue; }
@@ -325,6 +358,7 @@ async function playerStats(season) {
       const away = comp.competitors.find((c) => c.homeAway === "away");
       if (!home || !away) continue;
       const at = abbrOf(home.team.id);
+      upcomingTeams[ev.id] = { a: away.team.id, h: home.team.id, date: ev.date };
       upcoming[ev.id] = {
         h: fatigue(history[home.team.id] || [], ev.date, at, arenaOf),
         a: fatigue(history[away.team.id] || [], ev.date, at, arenaOf),
@@ -371,11 +405,38 @@ async function playerStats(season) {
     playersVersion: PLAYERS_VERSION,
     prevRatings, prevPlayers,
   };
+  // what picks.js would predict for each not-yet-started game right now
+  const projLog = readJson(PROJ_LOG_FILE, { games: {} });
+  const injuries = await fetchInjuries();
+  let logged = 0;
+  for (const id of Object.keys(upcomingTeams)) {
+    const u = upcomingTeams[id];
+    let espnH = null;
+    try {
+      const s = await fetchJson(SITE + "/summary?event=" + id);
+      const pr = s.predictor;
+      const aP = pr && pr.awayTeam && parseFloat(pr.awayTeam.gameProjection);
+      const hP = pr && pr.homeTeam && parseFloat(pr.homeTeam.gameProjection);
+      if (aP && hP && aP + hP > 0) espnH = hP / (aP + hP);
+    } catch (e) { /* model without the ESPN half, as picks.js does */ }
+    const p = projectGame(out, injuries, u.a, u.h, id, espnH);
+    if (!p) continue;
+    projLog.games[id] = Object.assign({ date: u.date, at: out.updated }, p);
+    logged++;
+  }
+  for (const id of Object.keys(projLog.games)) {
+    if (now - Date.parse(projLog.games[id].date) > PROJ_LOG_KEEP_MS) delete projLog.games[id];
+  }
+  out.calib = Object.assign(out.calib || {}, { deployed: calibrateDeployed(projLog, store.games) });
+
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(GAMES_FILE, JSON.stringify(store));
   fs.writeFileSync(STATS_FILE, JSON.stringify(out));
+  fs.writeFileSync(PROJ_LOG_FILE, JSON.stringify(projLog));
   console.log("[nba-stats] lines: " + lines.filled + "/" + lines.tried + " filled; upcoming " + Object.keys(upcoming).length +
-    "; calib " + (out.calib ? out.calib.games + " games" : "skipped"));
+    "; calib " + (out.calib.games ? out.calib.games + " games" : "skipped") +
+    "; deployed calib " + out.calib.deployed.games + " games" + (out.calib.deployed.ready ? "" : " (not ready)") +
+    "; logged " + logged + " projection(s)");
   console.log("[nba-stats] " + added + " new game(s); " + Object.keys(store.games).length + " stored; " +
     rated.length + " team(s) rated (current season: " + Object.keys(curRatings).length + "); " +
     Object.keys(players).length + " player(s); league h1 share " + lgShare.toFixed(4));

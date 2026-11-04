@@ -2,12 +2,14 @@ name: Track picks history
 
 on:
   schedule:
-    # 21:00 UTC ~= 05:00 Taiwan next day: after most MLB lines are posted and
-    # before that evening's MLB slate / the next Asian day's KBO+NPB games
-    # start, so record-picks.js captures a realistic "today's upcoming games"
-    # snapshot. Settlement runs first in the same job since by this time
-    # every league's previous games are long finished.
-    - cron: "0 21 * * *"
+    # 16:23 UTC ~= 11:23 ET / 00:23 Taiwan next day: lines are posted by
+    # then and it leaves room before the evening slate. The old "0 21" slot
+    # actually fired 23:40-02:40 UTC (GitHub delays top-of-hour schedules by
+    # hours), after the 19:00 ET NBA tip-offs, so most games had already
+    # started and were filtered out. An off-hour minute also avoids the
+    # top-of-hour queue. Settlement runs first in the same job since by this
+    # time every league's previous games are long finished.
+    - cron: "23 16 * * *"
   workflow_dispatch:
 
 permissions:

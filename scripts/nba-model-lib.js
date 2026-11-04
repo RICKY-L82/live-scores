@@ -1,8 +1,10 @@
 "use strict";
 /*
  * Shared NBA model pieces for scripts/collect-nba-stats.js: arena table,
- * schedule-fatigue features, and the backtest that calibrates the
- * coefficients assets/js/picks.js applies (data/nba/calibration.json).
+ * schedule-fatigue features, the backtest that calibrates the coefficients
+ * assets/js/picks.js applies (stats.json → calib), a Node copy of picks.js's
+ * projection used to log what the page predicted before each game, and the
+ * calibration of the market weights against that log (calib.deployed).
  */
 
 // lat, lon, UTC offset (standard time), high altitude
@@ -88,6 +90,28 @@ const normCdf = (z) => {
   const d = 0.3989423 * Math.exp(-z * z / 2);
   const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
   return z > 0 ? 1 - p : p;
+};
+// Acklam's inverse normal CDF, same as assets/js/picks.js invNormCdf
+function invNormCdf(p) {
+  p = clamp(p, 1e-6, 1 - 1e-6);
+  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+  const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+  const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+  const plow = 0.02425;
+  if (p < plow || p > 1 - plow) {
+    const q = Math.sqrt(-2 * Math.log(p < plow ? p : 1 - p));
+    const v = (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    return p < plow ? v : -v;
+  }
+  const q = p - 0.5, r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+    (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+const impliedProb = (american) => {
+  const o = Number(String(american === undefined || american === null ? "" : american).replace(/^\+/, ""));
+  if (!isFinite(o) || o === 0) return null;
+  return o < 0 ? -o / (-o + 100) : 100 / (o + 100);
 };
 
 /*
@@ -214,4 +238,122 @@ function calibrate(games, arenaOf, abbrOf) {
   };
 }
 
-module.exports = { ARENAS, fatigue, calibrate };
+// ---------- what assets/js/picks.js predicts (keep in sync with its nbaProjection) ----------
+const NBA_DEFAULT_MARGIN = { hca: 2, b2b: 1.4, threeIn4: 0.8, travel: 0, tz: 0.8, altitude: 0, recent: 0.25, sd: 14.5 };
+const INJ_FACTOR = 0.3, INJ_REPL_PER_MIN = 0.15, INJ_CAP = 10;
+const INJ_WEIGHT = { "Out": 1, "Doubtful": 0.75, "Questionable": 0.5, "Day-To-Day": 0.4 };
+function injuryPts(list, team, players, season) {
+  let total = 0;
+  (list || []).forEach((inj) => {
+    const w = INJ_WEIGHT[inj.status];
+    const p = inj.pid && players[inj.pid];
+    if (!w || !p || p.mpg < 10) return;
+    const value = isFinite(p.gs) ? p.gs - INJ_REPL_PER_MIN * p.mpg : 0.5 * p.ppg;
+    const baked = p.s !== season && team && team.gp ? team.gp / (team.gp + 15) : 0;
+    const pts = INJ_FACTOR * Math.max(0, value) * w * (1 - baked);
+    if (pts >= 0.3) total += pts;
+  });
+  return Math.min(total, INJ_CAP);
+}
+// injuries: { teamId: [{pid, status}] } from ESPN's injury report; espnH:
+// ESPN predictor home win share or null. Returns the model inputs picks.js
+// feeds into its market blend: own margin/total, the ESPN-blended margin
+// (mu) and win probability (winH).
+function projectGame(stats, injuries, aId, hId, eventId, espnH) {
+  const aT = stats && stats.teams[aId], hT = stats && stats.teams[hId], L = stats && stats.league;
+  if (!aT || !hT || !aT.pace || !hT.pace || !L || !L.pace || !L.ortg) return null;
+  const C = (stats.calib && stats.calib.margin) || NBA_DEFAULT_MARGIN;
+  const pace = aT.pace * hT.pace / L.pace;
+  const aBase = pace * (aT.ortg * hT.drtg / L.ortg) / 100;
+  const hBase = pace * (hT.ortg * aT.drtg / L.ortg) / 100;
+  let adj = C.hca;
+  const f = stats.upcoming && stats.upcoming[eventId];
+  if (f) {
+    const add = (coef, diff) => { if (coef && diff) adj += coef * diff; };
+    add(C.b2b, f.a.b2b - f.h.b2b);
+    add(C.threeIn4, f.a.threeIn4 - f.h.threeIn4);
+    add(C.tz, f.a.tz - f.h.tz);
+    add(C.travel, f.a.travel - f.h.travel);
+    add(C.altitude, f.alt);
+  }
+  if (C.recent && aT.recent !== null && hT.recent !== null && aT.recent !== undefined && hT.recent !== undefined) {
+    adj += C.recent * (hT.recent - aT.recent);
+  }
+  const aInj = injuryPts(injuries[aId], aT, stats.players || {}, stats.season);
+  const hInj = injuryPts(injuries[hId], hT, stats.players || {}, stats.season);
+  const margin = hBase - aBase + adj - hInj + aInj;
+  const total = aBase + hBase - aInj - hInj;
+  const winOwn = normCdf(margin / C.sd);
+  const hasEspn = espnH !== null && espnH !== undefined && isFinite(espnH);
+  return {
+    margin: r2(margin, 2), total: r2(total, 2),
+    espnH: hasEspn ? r2(espnH, 4) : null,
+    mu: r2(hasEspn ? (margin + C.sd * invNormCdf(espnH)) / 2 : margin, 2),
+    winH: r2(hasEspn ? (winOwn + espnH) / 2 : winOwn, 4),
+  };
+}
+
+/*
+ * Market weights for the model picks.js actually runs, fitted on its own
+ * pre-game projections (data/nba/proj-log.json) against results and the
+ * DraftKings close. calibrate() above can only rebuild a points-per-game
+ * model from games.json — no historical pace/efficiency, injuries or ESPN
+ * predictor — so its market weights describe a different model. picks.js
+ * switches to these once `ready` (enough logged games).
+ */
+const DEPLOYED_MIN_GAMES = 200;
+function calibrateDeployed(log, games) {
+  const rows = [];
+  Object.keys((log && log.games) || {}).forEach((id) => {
+    const p = log.games[id], g = games[id];
+    if (!g || !g.ln || !isFinite(g.ln.hl) || !isFinite(g.ln.tot)) return;
+    const aPts = g.aq.reduce((x, y) => x + y, 0), hPts = g.hq.reduce((x, y) => x + y, 0);
+    rows.push({ p, ln: g.ln, margin: hPts - aPts, total: aPts + hPts });
+  });
+  if (rows.length < 30) return { games: rows.length, ready: false };
+  const mean = (arr) => arr.reduce((x, y) => x + y, 0) / arr.length;
+  // the model's average miss on totals (e.g. early-season unders), removed
+  // before the model is weighed against the line
+  const totalBias = clamp(mean(rows.map((r) => r.total - r.p.total)), -8, 8);
+  const share = (a, b) => clamp(a / ((a > 0 ? a : 0) + (b > 0 ? b : 0) || 1), 0, 1);
+  const wM = ridge(rows.map((r) => [1, r.p.mu, -r.ln.hl]), rows.map((r) => r.margin), 1);
+  const wT = ridge(rows.map((r) => [1, r.p.total + totalBias, r.ln.tot]), rows.map((r) => r.total), 1);
+  // moneyline: blend weight with the lowest Brier score against the no-vig close
+  const mlRows = rows.filter((r) => r.ln.ml && impliedProb(r.ln.ml[0]) !== null && impliedProb(r.ln.ml[1]) !== null && r.margin !== 0);
+  let mlModelWeight = null;
+  if (mlRows.length >= 30) {
+    let best = Infinity;
+    for (let i = 0; i <= 20; i++) {
+      const w = i / 20;
+      const brier = mean(mlRows.map((r) => {
+        const a = impliedProb(r.ln.ml[0]), h = impliedProb(r.ln.ml[1]);
+        const pH = w * r.p.winH + (1 - w) * h / (a + h);
+        return (pH - (r.margin > 0 ? 1 : 0)) ** 2;
+      }));
+      if (brier < best - 1e-9) { best = brier; mlModelWeight = w; }
+    }
+  }
+  const hit = (gap, res) => [1, 2, 3, 4, 5].map((th) => {
+    let w = 0, n = 0;
+    rows.forEach((r) => {
+      const d = gap(r);
+      if (Math.abs(d) < th) return;
+      const x = res(r);
+      if (x === 0) return;
+      n++; if (Math.sign(x) === Math.sign(d)) w++;
+    });
+    return { gap: th, n, hit: n ? r2(w / n, 3) : null };
+  });
+  return {
+    games: rows.length,
+    ready: rows.length >= DEPLOYED_MIN_GAMES,
+    spreadModelWeight: r2(share(wM[1], wM[2]), 3),
+    totalModelWeight: r2(share(wT[1], wT[2]), 3),
+    mlModelWeight, mlGames: mlRows.length,
+    totalBias: r2(totalBias, 2),
+    spreadHitByGap: hit((r) => r.p.mu + r.ln.hl, (r) => r.margin + r.ln.hl),
+    totalHitByGap: hit((r) => r.p.total + totalBias - r.ln.tot, (r) => r.total - r.ln.tot),
+  };
+}
+
+module.exports = { ARENAS, fatigue, calibrate, projectGame, calibrateDeployed };

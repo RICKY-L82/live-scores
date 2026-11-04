@@ -349,7 +349,7 @@
     Promise.all([
       fetchMlbGames(),
       fetchEspnGames("nba", "NBA"),
-      fetchEspnGames("wnba", "WNBA"),
+      Promise.resolve([]), // WNBA temporarily disabled (offseason) — fetchEspnGames("wnba", "WNBA")
       Promise.resolve([]), // KBO temporarily disabled — fetchOddsApiGames("baseball_kbo", "KBO")
       Promise.resolve([]), // NPB temporarily disabled — fetchOddsApiGames("baseball_npb", "NPB")
     ]).then(function (res) {

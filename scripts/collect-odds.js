@@ -29,7 +29,7 @@ const path = require("path");
 const LEAGUES = {
   mlb: "baseball/mlb",
   nba: "basketball/nba",
-  wnba: "basketball/wnba",
+  // wnba: "basketball/wnba", — WNBA temporarily disabled (offseason)
 };
 const OUT_DIR = path.join(__dirname, "..", "data", "odds");
 const KEEP_MS = 4 * 86400000; // drop events older than 4 days
