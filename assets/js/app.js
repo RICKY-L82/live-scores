@@ -6,7 +6,7 @@
     nba: { label: "NBA 美國職籃", color: "#e0762c" },
     wnba: { label: "WNBA 美國女籃", color: "#b0568f" },
   };
-  var LEAGUE_ORDER = ["mlb", "nba"]; // WNBA temporarily disabled (offseason) — "wnba"
+  var LEAGUE_ORDER = ["nba"]; // MLB/WNBA temporarily disabled (offseason) — "mlb", "wnba"
 
   var state = {
     date: new Date(),
@@ -18,6 +18,12 @@
   };
 
   var modal = { game: null };
+  // bumped per loadAll(); a response from an older load (date/league switched
+  // meanwhile) is dropped instead of overwriting the newer one
+  var loadSeq = 0;
+  // per-game prediction results, so a re-render (pin, retry) repaints them
+  // instead of falling back to the 模型計算中… placeholder
+  var predByGame = {};
   var sectionCache = {};
   var mlbFormCache = { t: 0, map: null };
 
@@ -486,13 +492,14 @@
     var ymd = dateStr.replace(/-/g, "");
     var url = "https://site.api.espn.com/apis/site/v2/sports/basketball/" + leagueKey + "/scoreboard?dates=" + ymd;
     return fetchJson(url).then(function (data) {
-      return (data.events || []).filter(function (ev) {
-        var t = ev.competitions[0].status.type || {};
-        return t.state === "pre" && !/postponed|cancel/i.test(t.name || "");
-      }).map(function (ev) {
-        var comp = ev.competitions[0];
-        var home = comp.competitors.find(function (c) { return c.homeAway === "home"; });
-        var away = comp.competitors.find(function (c) { return c.homeAway === "away"; });
+      // one malformed event is skipped instead of failing the whole league
+      return (data.events || []).map(function (ev) {
+        var comp = ev.competitions && ev.competitions[0];
+        var t = (comp && comp.status && comp.status.type) || {};
+        if (t.state !== "pre" || /postponed|cancel/i.test(t.name || "")) return null;
+        var home = (comp.competitors || []).find(function (c) { return c.homeAway === "home"; });
+        var away = (comp.competitors || []).find(function (c) { return c.homeAway === "away"; });
+        if (!home || !away || !home.team || !away.team) return null;
         return {
           id: leagueKey + "-" + ev.id,
           league: leagueKey,
@@ -503,7 +510,7 @@
           away: { name: away.team.displayName, logo: away.team.logo },
           home: { name: home.team.displayName, logo: home.team.logo },
         };
-      });
+      }).filter(Boolean);
     });
   }
 
@@ -523,25 +530,30 @@
       return new Date(a.startTime) - new Date(b.startTime);
     });
   }
-  function loadLeague(key) {
+  function loadLeague(key, seq) {
+    if (seq === undefined) seq = loadSeq;
     var dateStr = usDateStrFor(state.date);
     return FETCHERS[key](dateStr)
       .then(function (games) {
+        if (seq !== loadSeq) return;
         sortGames(games);
         games.forEach(recordOdds);
         state.gamesByLeague[key] = games;
         state.errorByLeague[key] = null;
       })
       .catch(function (err) {
+        if (seq !== loadSeq) return;
         state.errorByLeague[key] = err.message || "載入失敗";
       });
   }
 
   function loadAll() {
+    var seq = ++loadSeq;
     state.loading = true;
     render();
     var keys = state.filter === "all" ? LEAGUE_ORDER : [state.filter];
-    return Promise.allSettled(keys.map(loadLeague)).then(function () {
+    return Promise.allSettled(keys.map(function (k) { return loadLeague(k, seq); })).then(function () {
+      if (seq !== loadSeq) return;
       state.loading = false;
       state.lastUpdatedStr = new Date().toLocaleTimeString("zh-TW", { hour12: false });
       saveSnapshot();
@@ -601,7 +613,8 @@
       if (sum || badge) oddsHtml = '<div class="odds-row">' + sum + badge + '</div>';
     }
 
-    var predictHtml = '<div class="predict-block" id="predict-' + esc(game.id) + '"><div class="predict-empty">模型計算中…</div></div>';
+    var predictHtml = '<div class="predict-block" id="predict-' + esc(game.id) + '">' +
+      (predByGame.hasOwnProperty(game.id) ? predictBlockHtml(predByGame[game.id]) : '<div class="predict-empty">模型計算中…</div>') + '</div>';
 
     return (
       '<div class="game-card clickable" data-gid="' + esc(game.id) + '" style="--league-color:' + color + '">' +
@@ -683,7 +696,11 @@
       });
     }
 
-    document.getElementById("dateLabel").textContent = formatDateLabel(state.date);
+    // the slate loaded is the US Eastern date, which lags Taiwan by a day
+    // until ~13:00 local — say which one, so "明天" never silently means ET today
+    var us = usDateStrFor(state.date).split("-");
+    document.getElementById("dateLabel").textContent =
+      formatDateLabel(state.date) + "・美東 " + Number(us[1]) + "/" + Number(us[2]);
   }
 
   // ================================================================
@@ -885,8 +902,9 @@
     var d = (f1 - f0) * 100;
     if (Math.abs(d) < 1) return "";
     var side = d > 0 ? game.home.name + "(主)" : game.away.name + "(客)";
+    // f0/f1 are the home side's; flip them when the away side is the one gaining
     return '<div class="detail-note">開盤至今,<b>' + esc(side) + '</b> 的市場中性勝率由 ' +
-      pctStr(f0) + ' 升至 ' + pctStr(f1) + ',為市場資金較看好的一方。</div>';
+      pctStr(d > 0 ? f0 : 1 - f0) + ' 升至 ' + pctStr(d > 0 ? f1 : 1 - f1) + ',為市場資金較看好的一方。</div>';
   }
 
   // card badge: which side has gained implied probability since open
@@ -1751,6 +1769,7 @@
       var fn = PREDICT_FETCHERS[key];
       (state.gamesByLeague[key] || []).forEach(function (game) {
         fn(game).then(function (pred) {
+          predByGame[game.id] = pred;
           var el = document.getElementById("predict-" + game.id);
           if (el) el.innerHTML = predictBlockHtml(pred);
         });
@@ -2239,6 +2258,7 @@
       }
 
       html += oddsDetailHtml(game);
+      if (modal.game !== game) return; // another game opened (or closed) meanwhile
       body.innerHTML = html;
     });
   }
@@ -2259,6 +2279,7 @@
 
       html += nbaPreviewSections(game, s, awayC, homeC);
       html += oddsDetailHtml(game);
+      if (modal.game !== game) return; // another game opened (or closed) meanwhile
       body.innerHTML = html;
     });
   }
@@ -2344,6 +2365,7 @@
     return DETAIL_RENDERERS[game.league](game, body).then(function () {
       hydrateOddsHistory(game);
     }).catch(function (err) {
+      if (modal.game !== game) return;
       body.innerHTML = detailHeaderHtml(game, null, null) +
         '<div class="error-state">詳細資料載入失敗:' + esc(err.message || err) +
         '<br><button onclick="window.__scoreApp.reloadDetail()">重試</button></div>';
@@ -2404,7 +2426,7 @@
   function retryLeague(key) {
     state.errorByLeague[key] = null;
     render();
-    loadLeague(key).then(function () { render(); });
+    loadLeague(key).then(function () { render(); hydratePredictions(); });
   }
 
   function init() {
@@ -2453,6 +2475,11 @@
 
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && modal.game) closeDetail();
+    });
+    // a tab left open past local midnight would keep showing a day whose
+    // games have all started (and shiftDate() refuses to go back to it)
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && toISODate(state.date) < toISODate(new Date())) goToday();
     });
 
     var savedTheme = store.get("scoreapp-theme");

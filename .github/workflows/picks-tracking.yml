@@ -28,12 +28,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
       - name: Install Playwright browser
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Settle pending picks
         run: node scripts/settle-picks.js
@@ -41,7 +58,9 @@ jobs:
       - name: Record today's picks
         run: node scripts/record-picks.js
 
+      # always(): if recording fails, the settle step's results are still saved
       - name: Commit and push if changed
+        if: always()
         run: |
           git config user.name "picks-bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -51,5 +70,11 @@ jobs:
             exit 0
           fi
           git commit -m "picks: track $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          git pull --rebase origin main
-          git push origin main
+          # the other workflow may push between our pull and push; retry
+          for i in 1 2 3 4; do
+            git pull --rebase origin main && git push origin main && exit 0
+            git rebase --abort 2>/dev/null || true
+            echo "push attempt $i failed, retrying"
+            sleep $((i * 5))
+          done
+          exit 1

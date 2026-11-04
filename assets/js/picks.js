@@ -17,13 +17,14 @@
   // 30-day badge — keyed the same way scripts/record-picks.js groups its
   // snapshot, so the stats file's section keys line up with these directly
   var SECTION_META = {
-    mlb_fi: "⚾ MLB 首局 NRFI / YRFI",
-    mlb_p1era: "⚾ MLB 先發首局 ERA 對決",
-    mlb_fiw: "⚾ MLB 首局勝負預測",
-    mlb_ou: "⚾ MLB 大小分 Over/Under",
-    mlb_sp: "⚾ MLB 讓分 Run Line",
-    mlb_ml: "⚾ MLB 獨贏勝率",
-    mlb_ml_edge: "⚾ MLB 獨贏優勢",
+    // MLB temporarily disabled (offseason)
+    // mlb_fi: "⚾ MLB 首局 NRFI / YRFI",
+    // mlb_p1era: "⚾ MLB 先發首局 ERA 對決",
+    // mlb_fiw: "⚾ MLB 首局勝負預測",
+    // mlb_ou: "⚾ MLB 大小分 Over/Under",
+    // mlb_sp: "⚾ MLB 讓分 Run Line",
+    // mlb_ml: "⚾ MLB 獨贏勝率",
+    // mlb_ml_edge: "⚾ MLB 獨贏優勢",
     // WNBA temporarily disabled (offseason)
     // wnba_ou: "🏀 WNBA 大小分 Over/Under",
     // wnba_sp: "🏀 WNBA 讓分 Spread",
@@ -179,6 +180,15 @@
     var d = 0.3989423 * Math.exp(-z * z / 2);
     var p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
     return z > 0 ? 1 - p : p;
+  }
+  // P(X > line) for X ~ N(mu, sd), settled like a sportsbook: on a whole-number
+  // line X == line is a push, so this is the probability conditional on no
+  // push (the same basis win-rate stats and the price's break-even use);
+  // the push band is approximated with a ±0.5 continuity correction
+  function overProbNoPush(line, mu, sd) {
+    if (line % 1 !== 0) return 1 - normCdf((line - mu) / sd);
+    var pOver = 1 - normCdf((line + 0.5 - mu) / sd), pUnder = normCdf((line - 0.5 - mu) / sd);
+    return pOver + pUnder > 0 ? pOver / (pOver + pUnder) : 0.5;
   }
   function overProbOf(expTot, line) {
     return 1 - normCdf((line - expTot) / TOTAL_SD);
@@ -1792,10 +1802,12 @@
   }
   function totalPickCandidate(base, opts) {
     var exp = opts.w * opts.exp + (1 - opts.w) * opts.line;
-    var pOver = 1 - normCdf((opts.line - exp) / opts.sd);
+    var pOver = overProbNoPush(opts.line, exp, opts.sd);
     var beO = impliedProb(opts.over), beU = impliedProb(opts.under);
     if (beO === null || beU === null) return null;
-    var pickOver = pOver >= 0.5;
+    // the side with the larger edge (at most one side can be +EV), not just
+    // the likelier side — otherwise a +EV side at a lopsided price is dropped
+    var pickOver = pOver - beO >= (1 - pOver) - beU;
     var prob = pickOver ? pOver : 1 - pOver;
     var be = pickOver ? beO : beU;
     var mv = moveVerdict(opts.move === null || opts.move === undefined ? null : (pickOver ? opts.move : -opts.move), NBA_MOVE_TOTAL, "分", opts.moveLabel || "總分");
@@ -1945,7 +1957,11 @@
             var fair = ml && fairProbs(ml.a.cur, ml.h.cur);
             if (modelH !== null && fair) {
               var finalH = wMl * modelH + (1 - wMl) * fair.home;
-              var pickHome = finalH >= 0.5;
+              var beH = impliedProb(ml.h.cur), beA = impliedProb(ml.a.cur);
+              if (beH === null) beH = fair.home;
+              if (beA === null) beA = fair.away;
+              // larger-edge side, so a +EV underdog isn't dropped for a -EV favorite
+              var pickHome = finalH - beH >= (1 - finalH) - beA;
               var prob = pickHome ? finalH : 1 - finalH;
               var mkt = pickHome ? fair.home : fair.away;
               var priceMl = pickHome ? ml.h.cur : ml.a.cur;
@@ -1975,10 +1991,10 @@
               var muModel = proj ? proj.margin : marginSd * invNormCdf(modelH);
               if (proj && espnH !== null) muModel = (proj.margin + marginSd * invNormCdf(espnH)) / 2;
               var mu = wSp * muModel + (1 - wSp) * (-sp.home.line);
-              var pHomeCover = 1 - normCdf((-sp.home.line - mu) / marginSd);
+              var pHomeCover = overProbNoPush(-sp.home.line, mu, marginSd);
               var beHomeSp = impliedProb(sp.home.price), beAwaySp = impliedProb(sp.away.price);
               if (beHomeSp !== null && beAwaySp !== null) {
-                var pickHomeSp = pHomeCover >= 0.5;
+                var pickHomeSp = pHomeCover - beHomeSp >= (1 - pHomeCover) - beAwaySp;
                 var probSp = pickHomeSp ? pHomeCover : 1 - pHomeCover;
                 var beSp = pickHomeSp ? beHomeSp : beAwaySp;
                 var lineSp = pickHomeSp ? sp.home.line : sp.away.line;
@@ -2783,7 +2799,8 @@
   };
 
   function pickCardHtml(c, rank) {
-    var kelly = c.noMarket ? null : halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
+    // no Kelly stake on a placeholder price ("-110(參考…)") — there's nothing to bet at yet
+    var kelly = c.noMarket || /參考/.test(String(c.price)) ? null : halfKellyStr(c.prob, String(c.price).replace(/\(.*$/, ""));
     var weakTag = !c.noMarket && c.edge < 0.01 ? '<span class="pick-weak">優勢有限</span>' : "";
     var noMarketTag = c.noMarket ? '<span class="pick-weak">無公開賠率,模型預測</span>' : "";
     return (
@@ -2891,6 +2908,7 @@
         mlb_fi: [], mlb_p1era: [], mlb_fiw: [], mlb_ou: [], mlb_sp: [], mlb_ml: [], mlb_ml_edge: [],
         nba_ml: [], nba_sp: [], nba_ou: [], nba_h1: [],
       };
+      window.__picksNbaCandidates = 0;
       window.__picksReady = true;
       return;
     }
@@ -2941,9 +2959,13 @@
       // wnba_ou: slim(ouWnba), wnba_sp: slim(spWnba), — WNBA temporarily disabled (offseason)
       nba_ml: slim(mlNba), nba_sp: slim(spNba), nba_ou: slim(ouNba), nba_h1: slim(h1Nba),
     };
+    // pre-+EV-filter count, so record-picks.js can tell "no +EV pick today"
+    // apart from "NBA data never loaded" (collectNba() swallows its errors)
+    window.__picksNbaCandidates = mlNbaAll.length + spNbaAll.length + ouNbaAll.length + h1NbaAll.length;
     window.__picksReady = true;
     var mainHtml =
-      leagueSectionHtml("⚾", "MLB", fi.length + fiP1.length + fiw.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
+      // MLB temporarily disabled (offseason)
+      // leagueSectionHtml("⚾", "MLB", fi.length + fiP1.length + fiw.length + ouMlb.length + spMlb.length + mlMlb.length, mlbSubHtml) +
       // WNBA temporarily disabled (offseason)
       // leagueSectionHtml("🏀", "WNBA", ouWnba.length + spWnba.length, wnbaSubHtml) +
       leagueSectionHtml("🏀", "NBA", mlNbaAll.length + spNbaAll.length + ouNbaAll.length + h1NbaAll.length, nbaSubHtml);
@@ -2987,7 +3009,7 @@
     el.innerHTML = '<div class="detail-loading"><div class="spinner"></div>正在抓取賽程、賠率與數據,計算今日勝率最高的五注…</div>';
     document.getElementById("updatedAt").textContent = "計算中…";
     Promise.all([
-      collectMlb().catch(function () { return []; }),
+      Promise.resolve([]), // MLB temporarily disabled (offseason) — collectMlb().catch(function () { return []; })
       collectNba().catch(function () { return []; }),
       Promise.resolve([]), // WNBA temporarily disabled (offseason) — collectWnba()
       Promise.resolve([]), // KBO temporarily disabled — collectKbo()
@@ -3128,7 +3150,8 @@
     };
   }
   var TAB_LEAGUES = {
-    mlb: { label: "MLB", collect: function () { return collectMlb().catch(function () { return []; }); }, build: buildMlbLeagueBlock },
+    // MLB temporarily disabled (offseason)
+    // mlb: { label: "MLB", collect: function () { return collectMlb().catch(function () { return []; }); }, build: buildMlbLeagueBlock },
     // WNBA temporarily disabled (offseason)
     // wnba: { label: "WNBA", collect: function () { return collectWnba().catch(function () { return []; }); }, build: buildWnbaLeagueBlock },
     nba: { label: "NBA", collect: function () { return collectNba().catch(function () { return []; }); }, build: buildNbaLeagueBlock },

@@ -2,8 +2,9 @@ name: Collect odds snapshots
 
 on:
   schedule:
-    # every 20 minutes; GitHub may delay scheduled runs by a few minutes
-    - cron: "*/20 * * * *"
+    # every 20 minutes, off the top of the hour: "*/20" (:00/:20/:40) landed
+    # in GitHub's busiest slots and in practice ran only ~4 times a day
+    - cron: "7,27,47 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -40,5 +41,11 @@ jobs:
             exit 0
           fi
           git commit -m "odds: snapshot $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          git pull --rebase origin main
-          git push origin main
+          # the other workflow may push between our pull and push; retry
+          for i in 1 2 3 4; do
+            git pull --rebase origin main && git push origin main && exit 0
+            git rebase --abort 2>/dev/null || true
+            echo "push attempt $i failed, retrying"
+            sleep $((i * 5))
+          done
+          exit 1

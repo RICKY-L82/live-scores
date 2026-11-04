@@ -32,9 +32,10 @@ const KEEP_MS = 35 * 86400000;          // prune history files older than this
 const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97", "b998595122a6efd15f322466e21ee2b5"];
 
 const SECTION_META = {
-  mlb_fi: "⚾ MLB 首局 NRFI / YRFI", mlb_p1era: "⚾ MLB 先發首局 ERA 對決", mlb_fiw: "⚾ MLB 首局勝負預測",
-  mlb_ou: "⚾ MLB 大小分 Over/Under", mlb_sp: "⚾ MLB 讓分 Run Line",
-  mlb_ml: "⚾ MLB 獨贏勝率", mlb_ml_edge: "⚾ MLB 獨贏優勢",
+  // MLB temporarily disabled (offseason)
+  // mlb_fi: "⚾ MLB 首局 NRFI / YRFI", mlb_p1era: "⚾ MLB 先發首局 ERA 對決", mlb_fiw: "⚾ MLB 首局勝負預測",
+  // mlb_ou: "⚾ MLB 大小分 Over/Under", mlb_sp: "⚾ MLB 讓分 Run Line",
+  // mlb_ml: "⚾ MLB 獨贏勝率", mlb_ml_edge: "⚾ MLB 獨贏優勢",
   // WNBA temporarily disabled (offseason)
   // wnba_ou: "🏀 WNBA 大小分 Over/Under", wnba_sp: "🏀 WNBA 讓分 Spread",
   nba_ml: "🏀 NBA 獨贏勝率", nba_sp: "🏀 NBA 讓分 Spread", nba_ou: "🏀 NBA 大小分 Over/Under",
@@ -165,7 +166,11 @@ async function espnGamesForDate(leagueKey, date) {
       const map = new Map();
       (data.events || []).forEach((ev) => {
         const comp = ev.competitions && ev.competitions[0];
-        if (!comp || !comp.status || !comp.status.type || comp.status.type.state !== "post") return;
+        // postponed/canceled games are also state "post" (score "0"), which
+        // would settle ML as a push, unders as wins, etc. — only a game that
+        // was actually played counts; anything else ends up void after VOID_AFTER_MS
+        const st = comp && comp.status && comp.status.type;
+        if (!st || st.state !== "post" || st.completed !== true || /POSTPONED|CANCELED|CANCELLED|SUSPENDED|FORFEIT/i.test(st.name || "")) return;
         const home = comp.competitors.find((c) => c.homeAway === "home");
         const away = comp.competitors.find((c) => c.homeAway === "away");
         if (!home || !away) return;
@@ -174,6 +179,7 @@ async function espnGamesForDate(leagueKey, date) {
           return ls.length >= 2 ? Number(ls[0].value) + Number(ls[1].value) : null;
         };
         const aH1 = firstHalf(away), hH1 = firstHalf(home);
+        if (!isFinite(Number(away.score)) || !isFinite(Number(home.score)) || away.score === "" || home.score === "") return;
         map.set(away.team.displayName + "|" + home.team.displayName, {
           awayScore: Number(away.score), homeScore: Number(home.score),
           h1Total: aH1 === null || hH1 === null ? null : aH1 + hH1,

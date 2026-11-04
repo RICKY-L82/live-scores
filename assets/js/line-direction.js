@@ -347,7 +347,7 @@
     el.innerHTML = '<div class="detail-loading"><div class="spinner"></div>正在抓取今日賽程與盤口歷史,統計資金流向…</div>';
     document.getElementById("updatedAt").textContent = "計算中…";
     Promise.all([
-      fetchMlbGames(),
+      Promise.resolve([]), // MLB temporarily disabled (offseason) — fetchMlbGames()
       fetchEspnGames("nba", "NBA"),
       Promise.resolve([]), // WNBA temporarily disabled (offseason) — fetchEspnGames("wnba", "WNBA")
       Promise.resolve([]), // KBO temporarily disabled — fetchOddsApiGames("baseball_kbo", "KBO")

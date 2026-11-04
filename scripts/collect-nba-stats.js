@@ -44,6 +44,7 @@ const PACE_BLEND_GP = 5;  // pace settles within a few games, so it leans on thi
 const PREV_H1_WEIGHT = 0.5;
 const PLAYERS_VERSION = 2;  // bump when the per-player fields change
 const LINE_TRIES = 2;
+const BACKFILL_MIN_GAMES = 1000;  // last season counts as backfilled once this many of its games are stored
 const RECENT_N = 10;
 
 async function fetchJson(url) {
@@ -286,8 +287,12 @@ async function playerStats(season) {
   if (!store.backfilled[lastSeason]) {
     const from = (lastSeason - 1) + "-10-15", to = lastSeason + "-06-25";
     const n = await topUpGames(store, dateRange(from, to));
-    store.backfilled[lastSeason] = true;
-    console.log("[nba-stats] backfilled season " + lastSeason + ": " + n + " game(s)");
+    // a regular season alone is 1230 games — only stop retrying once most of
+    // it is in (a failed ESPN run used to mark the backfill done for good)
+    const have = Object.values(store.games).filter((g) => g.season === lastSeason).length;
+    if (have >= BACKFILL_MIN_GAMES) store.backfilled[lastSeason] = true;
+    console.log("[nba-stats] backfilled season " + lastSeason + ": " + n + " new game(s), " + have + " stored" +
+      (store.backfilled[lastSeason] ? "" : " (incomplete, will retry)"));
   }
   const today = etDate(new Date(now));
   const recent = dateRange(etDate(new Date(now - 4 * 86400000)), today);
@@ -310,6 +315,21 @@ async function playerStats(season) {
   let prevRatings = prevStats && prevStats.prevSeason === lastSeason && prevStats.prevRatings;
   if (!prevRatings || !Object.keys(prevRatings).length) prevRatings = await teamRatings(lastSeason, teamIds);
   const curRatings = await teamRatings(season, teamIds);
+  // once this season has games, an empty/partial curRatings means ESPN failed —
+  // writing stats.json now would silently drop to last season's ratings and
+  // also reset the throttle, so nothing would retry for MIN_INTERVAL_MS
+  // (compared against teams that have actually played, so opening week passes)
+  const playedTeams = new Set();
+  Object.values(store.games).forEach((g) => { if (g.season === season) { playedTeams.add(g.away); playedTeams.add(g.home); } });
+  const seasonStarted = playedTeams.size > 0;
+  if (seasonStarted && Object.keys(curRatings).length < playedTeams.size / 2) {
+    fs.mkdirSync(DIR, { recursive: true });
+    fs.writeFileSync(GAMES_FILE, JSON.stringify(store));
+    console.error("[nba-stats] only " + Object.keys(curRatings).length + "/" + playedTeams.size +
+      " team(s) rated for " + season + "; keeping the previous stats.json");
+    process.exitCode = 1;
+    return;
+  }
 
   // first-half share of regulation points, per team, current + discounted last season
   const h1 = {};
@@ -389,6 +409,11 @@ async function playerStats(season) {
   let curPlayers = {}, prevPlayers = (prevStats && prevStats.prevSeason === lastSeason &&
     prevStats.playersVersion === PLAYERS_VERSION && prevStats.prevPlayers) || null;
   try { curPlayers = await playerStats(season); } catch (e) { console.error("[nba-stats] players " + season + ": " + e.message); }
+  // same idea for injuries' player values: keep the last good current-season set
+  if (seasonStarted && !Object.keys(curPlayers).length && prevStats && prevStats.season === season && prevStats.players) {
+    console.error("[nba-stats] no " + season + " player stats; reusing the previous build's");
+    Object.keys(prevStats.players).forEach((id) => { if (prevStats.players[id].s === season) curPlayers[id] = prevStats.players[id]; });
+  }
   if (!prevPlayers) {
     try { prevPlayers = await playerStats(lastSeason); } catch (e) { prevPlayers = {}; console.error("[nba-stats] players " + lastSeason + ": " + e.message); }
   }

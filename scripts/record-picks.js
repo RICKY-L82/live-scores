@@ -71,11 +71,32 @@ function taipeiToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 }
 
+// NBA games not yet started today (ET) that ESPN already has odds for — if
+// there are some but picks.js produced no NBA candidate at all, its data
+// fetching failed (collectNba() swallows errors) rather than "no +EV pick"
+async function upcomingNbaGamesWithOdds() {
+  const etDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()).replace(/-/g, "");
+  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + etDate,
+    { signal: AbortSignal.timeout(20000) });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const data = await res.json();
+  const now = Date.now();
+  return (data.events || []).filter((ev) => {
+    const comp = ev.competitions && ev.competitions[0];
+    return comp && comp.status && comp.status.type && comp.status.type.state === "pre" &&
+      new Date(ev.date).getTime() > now && Array.isArray(comp.odds) && comp.odds.length > 0;
+  }).length;
+}
+
+function countPicks(sections) {
+  return Object.values(sections || {}).reduce((n, list) => n + (Array.isArray(list) ? list.length : 0), 0);
+}
+
 (async () => {
   const server = await serveStatic();
   const port = server.address().port;
   const browser = await chromium.launch();
-  let sections;
+  let sections, nbaCandidates;
   try {
     const page = await browser.newPage();
     await page.route(ESPN_URL, proxyEspn);
@@ -88,6 +109,7 @@ function taipeiToday() {
     await page.goto("http://127.0.0.1:" + port + "/picks.html?auto=1", { waitUntil: "load" });
     await page.waitForFunction(() => window.__picksReady === true, null, { timeout: 90000 });
     sections = await page.evaluate(() => window.__picksSections);
+    nbaCandidates = await page.evaluate(() => window.__picksNbaCandidates);
   } finally {
     await browser.close();
     server.close();
@@ -107,17 +129,48 @@ function taipeiToday() {
       }));
   }
 
+  const total = countPicks(trimmed);
+  let upcomingNba = null;
+  try {
+    upcomingNba = await upcomingNbaGamesWithOdds();
+  } catch (e) {
+    console.error("[nba check] ESPN scoreboard failed: " + e.message);
+  }
+  const nbaFetchFailed = upcomingNba > 0 && !nbaCandidates;
+
   const date = taipeiToday();
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const file = path.join(OUT_DIR, date + ".json");
+
+  // Never overwrite a day that already has picks: a re-run (manual
+  // workflow_dispatch, or a delayed cron landing on the same Taiwan date)
+  // would drop picks whose games have since started, reset results the
+  // settle step already filled in, and effectively let picks be redrawn.
+  if (fs.existsSync(file)) {
+    let existing = null;
+    try {
+      existing = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch (e) {
+      console.error("existing " + file + " is unreadable, overwriting: " + e.message);
+    }
+    if (existing && countPicks(existing.sections) > 0) {
+      console.log(file + " already has " + countPicks(existing.sections) + " pick(s); leaving it untouched");
+      if (nbaFetchFailed) throw new Error("NBA had " + upcomingNba + " upcoming game(s) with odds but picks.js produced no NBA candidate");
+      return;
+    }
+  }
+
   fs.writeFileSync(file, JSON.stringify({
     date,
     recordedAt: new Date().toISOString(),
     sections: trimmed,
   }, null, 2));
 
-  const total = Object.values(trimmed).reduce((n, list) => n + list.length, 0);
-  console.log("recorded " + total + " pick(s) across " + Object.keys(trimmed).length + " section(s) to " + file);
+  console.log("recorded " + total + " pick(s) across " + Object.keys(trimmed).length + " section(s) to " + file +
+    " (NBA: " + nbaCandidates + " candidate(s), " + upcomingNba + " upcoming game(s) with odds)");
+  // fail the job (after writing, so settle results still get committed) —
+  // an empty file used to pass silently for 10 days while NBA was broken
+  if (nbaFetchFailed) throw new Error("NBA had " + upcomingNba + " upcoming game(s) with odds but picks.js produced no NBA candidate");
 })().catch((e) => {
   console.error("record-picks failed:", e);
   process.exit(1);

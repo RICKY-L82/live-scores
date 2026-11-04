@@ -27,7 +27,7 @@ const fs = require("fs");
 const path = require("path");
 
 const LEAGUES = {
-  mlb: "baseball/mlb",
+  // mlb: "baseball/mlb", — MLB temporarily disabled (offseason)
   nba: "basketball/nba",
   // wnba: "basketball/wnba", — WNBA temporarily disabled (offseason)
 };
@@ -187,16 +187,20 @@ async function collectLeague(league, slug) {
   }
 
   // prune stale events
+  let pruned = 0;
   for (const id of Object.keys(hist.events)) {
     const d = new Date(hist.events[id].date).getTime();
-    if (!isFinite(d) || d < now - KEEP_MS) delete hist.events[id];
+    if (!isFinite(d) || d < now - KEEP_MS) { delete hist.events[id]; pruned++; }
   }
 
+  console.log("[" + league + "] " + added + " new snapshot(s), " +
+    Object.keys(hist.events).length + " event(s) tracked");
+  // only rewrite on a real change — bumping "updated" alone made every run a
+  // commit (nothing reads it for ESPN leagues)
+  if (!added && !pruned) return added;
   hist.updated = new Date(now).toISOString();
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(path.join(OUT_DIR, league + ".json"), JSON.stringify(hist));
-  console.log("[" + league + "] " + added + " new snapshot(s), " +
-    Object.keys(hist.events).length + " event(s) tracked");
   return added;
 }
 
@@ -331,15 +335,18 @@ async function collectNbaH1() {
       updated++;
     }
   }
+  let pruned = 0;
   for (const id of Object.keys(store.events)) {
     const d = new Date(store.events[id].start).getTime();
-    if (!isFinite(d) || d < now - 86400000) delete store.events[id];
+    if (!isFinite(d) || d < now - 86400000) { delete store.events[id]; pruned++; }
   }
+  console.log("[nba-h1] " + calls + " odds call(s), " + updated + " line(s) updated, " +
+    Object.keys(store.events).length + " event(s) tracked");
+  // calls > 0 covers new entries too (an entry is only created when it's due)
+  if (!calls && !pruned) return;
   store.updated = new Date(now).toISOString();
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(NBA_H1_FILE, JSON.stringify(store));
-  console.log("[nba-h1] " + calls + " odds call(s), " + updated + " line(s) updated, " +
-    Object.keys(store.events).length + " event(s) tracked");
 }
 
 (async () => {
