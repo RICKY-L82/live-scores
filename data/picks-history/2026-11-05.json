@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-05",
+  "recordedAt": "2026-11-04T22:00:20.130Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Indiana Pacers",
+        "home": "Memphis Grizzlies",
+        "start": "2026-11-05T01:00Z",
+        "pick": "Memphis Grizzlies -6.5",
+        "prob": 0.5330052654154003,
+        "edge": 0.02320134384677286,
+        "price": "-104",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Los Angeles Lakers",
+        "home": "Sacramento Kings",
+        "start": "2026-11-05T03:00Z",
+        "pick": "Los Angeles Lakers -12.5",
+        "prob": 0.515307230785859,
+        "edge": 0.0007441239897425511,
+        "price": "-106",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Chicago Bulls",
+        "home": "New York Knicks",
+        "start": "2026-11-05T00:30Z",
+        "pick": "New York Knicks -12.5",
+        "prob": 0.5140355085972849,
+        "edge": 0.006646346035708461,
+        "price": "-103",
+        "result": null
+      }
+    ],
+    "nba_ou": [],
+    "nba_h1": []
+  }
+}
