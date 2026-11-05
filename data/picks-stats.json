@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-04T22:00:18.743Z",
+  "updated": "2026-11-05T22:08:40.115Z",
   "sections": {
     "nba_ml": {
       "label": "🏀 NBA 獨贏勝率",
@@ -9,9 +9,23 @@
     },
     "nba_sp": {
       "label": "🏀 NBA 讓分 Spread",
-      "day": null,
-      "week": null,
-      "month": null
+      "day": {
+        "date": "2026-11-05",
+        "w": 2,
+        "l": 1
+      },
+      "week": {
+        "from": "2026-11-05",
+        "to": "2026-11-05",
+        "w": 2,
+        "l": 1
+      },
+      "month": {
+        "from": "2026-11-05",
+        "to": "2026-11-05",
+        "w": 2,
+        "l": 1
+      }
     },
     "nba_ou": {
       "label": "🏀 NBA 大小分 Over/Under",
