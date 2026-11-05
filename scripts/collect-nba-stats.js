@@ -366,26 +366,40 @@ async function playerStats(season) {
     return +(mean(m.slice(-RECENT_N)) - mean(m)).toFixed(2);
   };
 
-  // fatigue features for the next two days' games
-  const upcoming = {}, upcomingTeams = {};
-  for (const ymd of [today, etDate(new Date(now + 86400000))]) {
-    let sb;
-    try { sb = await fetchJson(SITE + "/scoreboard?dates=" + ymd.replace(/-/g, "")); } catch (e) { continue; }
-    for (const ev of sb.events || []) {
-      const comp = ev.competitions && ev.competitions[0];
-      if (!comp || comp.status.type.state !== "pre") continue;
-      const home = comp.competitors.find((c) => c.homeAway === "home");
-      const away = comp.competitors.find((c) => c.homeAway === "away");
-      if (!home || !away) continue;
-      const at = abbrOf(home.team.id);
-      upcomingTeams[ev.id] = { a: away.team.id, h: home.team.id, date: ev.date };
-      upcoming[ev.id] = {
-        h: fatigue(history[home.team.id] || [], ev.date, at, arenaOf),
-        a: fatigue(history[away.team.id] || [], ev.date, at, arenaOf),
-        alt: (arenaOf(at) || [])[3] ? 1 : 0,
-      };
-    }
+  // fatigue features for the next two days' games. Rest/背靠背 come from the
+  // schedule, so yesterday's and today's not-yet-finished games count too —
+  // history above only has finished games, and this script often runs before
+  // a late game ends (e.g. a 22:30 ET game, then the same team tomorrow,
+  // showed 2 days' rest instead of a back-to-back).
+  const boards = [];
+  for (const ymd of [etDate(new Date(now - 86400000)), today, etDate(new Date(now + 86400000))]) {
+    try { boards.push(await fetchJson(SITE + "/scoreboard?dates=" + ymd.replace(/-/g, ""))); } catch (e) { boards.push(null); }
   }
+  const sides = (comp) => [comp.competitors.find((c) => c.homeAway === "away"), comp.competitors.find((c) => c.homeAway === "home")];
+  const schedHistory = {};
+  Object.keys(history).forEach((t) => { schedHistory[t] = history[t].slice(); });
+  boards.forEach((sb) => (sb && sb.events || []).forEach((ev) => {
+    const comp = ev.competitions && ev.competitions[0];
+    if (!comp || store.games[ev.id] || /POSTPONED|CANCELED|SUSPENDED/.test(comp.status.type.name || "")) return;
+    const [away, home] = sides(comp);
+    if (!away || !home) return;
+    const at = abbrOf(home.team.id);
+    [away, home].forEach((c) => (schedHistory[c.team.id] || (schedHistory[c.team.id] = [])).push({ date: ev.date, at }));
+  }));
+  const upcoming = {}, upcomingTeams = {};
+  boards.slice(1).forEach((sb) => (sb && sb.events || []).forEach((ev) => {
+    const comp = ev.competitions && ev.competitions[0];
+    if (!comp || comp.status.type.state !== "pre") return;
+    const [away, home] = sides(comp);
+    if (!home || !away) return;
+    const at = abbrOf(home.team.id);
+    upcomingTeams[ev.id] = { a: away.team.id, h: home.team.id, date: ev.date };
+    upcoming[ev.id] = {
+      h: fatigue(schedHistory[home.team.id] || [], ev.date, at, arenaOf),
+      a: fatigue(schedHistory[away.team.id] || [], ev.date, at, arenaOf),
+      alt: (arenaOf(at) || [])[3] ? 1 : 0,
+    };
+  }));
 
   const teams = {};
   teamIds.forEach((id) => {
