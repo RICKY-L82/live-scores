@@ -32,6 +32,7 @@
     nba_sp: "🏀 NBA 讓分 Spread",
     nba_ou: "🏀 NBA 大小分 Over/Under",
     nba_h1: "🏀 NBA 上半場大小分",
+    nba_sp_watch: "🏀 NBA 讓分觀察名單(非正期望值)",
   };
 
   // ---------- helpers (mirrors assets/js/app.js) ----------
@@ -1832,6 +1833,10 @@
   function nbaRank(list) {
     return list.filter(function (c) { return c.edge > 0; }).sort(function (a, b) { return b.prob - a.prob; });
   }
+  // 觀察名單: biggest model-vs-line disagreement first
+  function nbaWatchRank(list) {
+    return list.slice().sort(function (a, b) { return b.gap - a.gap; });
+  }
   function nbaWeight(v) {
     return typeof v === "number" && isFinite(v) ? clampNum(v, 0, NBA_MODEL_WEIGHT_MAX) : NBA_MODEL_WEIGHT_DEFAULT;
   }
@@ -2015,6 +2020,31 @@
                       ((probSp - beSp) >= 0 ? "+" : "") + ((probSp - beSp) * 100).toFixed(1) + "%</b>。",
                   ]).concat(mvSp ? [mvSp.note] : []),
                 }));
+                // 觀察名單: the raw model's side whatever the price, ranked by
+                // how far its margin sits from the line — tracked on its own to
+                // test whether that disagreement predicts covers (not a +EV pick)
+                var gapSp = muModel + sp.home.line; // > 0: model likes home vs. the line
+                if (gapSp) {
+                  var watchHome = gapSp > 0;
+                  var probW = watchHome ? pHomeCover : 1 - pHomeCover;
+                  var beW = watchHome ? beHomeSp : beAwaySp;
+                  var lineW = watchHome ? sp.home.line : sp.away.line;
+                  var priceW = watchHome ? sp.home.price : sp.away.price;
+                  out.push(Object.assign({}, base, {
+                    type: "spread", watch: true, gap: Math.abs(gapSp),
+                    pick: (watchHome ? hName : aName) + " " + (lineW >= 0 ? "+" : "") + lineW,
+                    price: String(priceW),
+                    prob: probW, market: beW, edge: probW - beW, conflict: false,
+                    reasons: modelNotes.concat([
+                      "模型預期主隊分差 " + (muModel >= 0 ? "+" : "") + muModel.toFixed(1) + ",盤口 " +
+                        (-sp.home.line >= 0 ? "+" : "") + (-sp.home.line) + ",差距 <b>" + Math.abs(gapSp).toFixed(1) +
+                        "</b> 分,模型站" + (watchHome ? "主" : "客") + "隊這邊。",
+                      "向盤口收斂後覆蓋機率 " + pctStr(probW) + ",以 " + esc(priceW) + " 計損益兩平 " + pctStr(beW) +
+                        ",優勢 " + ((probW - beW) >= 0 ? "+" : "") + ((probW - beW) * 100).toFixed(1) + "%。" +
+                        "觀察名單只追蹤模型方向是否勝過盤口,不是正期望值推薦。",
+                    ]),
+                  }));
+                }
               }
             }
 
@@ -2892,7 +2922,8 @@
     var mlMlbByEdge = mlMlb.slice().sort(byEdge);
     var mlNbaAll = ml.filter(function (c) { return c.league === "NBA"; });
     var ouNbaAll = ou.filter(function (c) { return c.league === "NBA"; });
-    var spNbaAll = sp.filter(function (c) { return c.league === "NBA"; });
+    var spNbaAll = sp.filter(function (c) { return c.league === "NBA" && !c.watch; });
+    var spNbaWatch = nbaWatchRank(sp.filter(function (c) { return c.league === "NBA" && c.watch; }));
     var h1NbaAll = candidates.filter(function (c) { return c.type === "h1over" || c.type === "h1under"; });
     var mlNba = nbaRank(mlNbaAll), ouNba = nbaRank(ouNbaAll), spNba = nbaRank(spNbaAll), h1Nba = nbaRank(h1NbaAll);
     var ouKbo = ou.filter(function (c) { return c.league === "KBO"; });
@@ -2906,7 +2937,7 @@
       el.innerHTML = '<div class="empty-state">今天沒有可分析的未開賽場次(賽事已全部開打、休兵日,或賠率尚未開出)。<br>盤口通常於美東早上陸續開出,可稍後再回來看。</div>';
       window.__picksSections = {
         mlb_fi: [], mlb_p1era: [], mlb_fiw: [], mlb_ou: [], mlb_sp: [], mlb_ml: [], mlb_ml_edge: [],
-        nba_ml: [], nba_sp: [], nba_ou: [], nba_h1: [],
+        nba_ml: [], nba_sp: [], nba_ou: [], nba_h1: [], nba_sp_watch: [],
       };
       window.__picksNbaCandidates = 0;
       window.__picksReady = true;
@@ -2931,7 +2962,7 @@
     // var wnbaSubHtml =
     //   sectionHtml("wnba_ou", "📊 大小分 Over/Under", ouWnba.slice(0, TOP_N), ouWnba.length) +
     //   sectionHtml("wnba_sp", "🎯 讓分 Spread", spWnba.slice(0, TOP_N), spWnba.length);
-    var nbaSubHtml = nbaSectionsHtml(mlNbaAll, spNbaAll, ouNbaAll, h1NbaAll);
+    var nbaSubHtml = nbaSectionsHtml(mlNbaAll, spNbaAll, ouNbaAll, h1NbaAll, spNbaWatch);
     // KBO/NPB temporarily disabled
     // var kboSubHtml =
     //   sectionHtml("kbo_ml", "🏆 獨贏勝率", mlKbo.slice(0, TOP_N), mlKbo.length) +
@@ -2958,6 +2989,7 @@
       mlb_ml: slim(mlMlb), mlb_ml_edge: slim(mlMlbByEdge),
       // wnba_ou: slim(ouWnba), wnba_sp: slim(spWnba), — WNBA temporarily disabled (offseason)
       nba_ml: slim(mlNba), nba_sp: slim(spNba), nba_ou: slim(ouNba), nba_h1: slim(h1Nba),
+      nba_sp_watch: slim(spNbaWatch),
     };
     // pre-+EV-filter count, so record-picks.js can tell "no +EV pick today"
     // apart from "NBA data never loaded" (collectNba() swallows its errors)
@@ -2980,7 +3012,7 @@
       'MLB 再多一個獨立的「先發首局 ERA 對決」子區塊:不看球隊近況、球場或天氣,純粹取兩位先發投手各自的「首局 ERA」split(至少需 8 局首局樣本),以卜瓦松近似 P(單局不失分)=e^(−首局ERA/9) 相乘估計 NRFI 機率,是與上方複合模型互相佐證的另一個角度。' +
       '「首局勝負預測」則是同一組首局 ERA 數據的另一種用法:不是問「首局會不會有人得分」,而是把兩邊首局預期得分(對方先發的首局 ERA)當成卜瓦松分布,模擬比較客隊/主隊誰在首局搶分機率較高,建議買分數較可能領先的一邊;此區無對應公開盤口,純模型預測,不計半凱利注碼。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
-      'NBA 以每百回合攻守效率與節奏估兩隊預期得分,主場優勢、背靠背、4 天 3 戰、跨時區與近況修正,並依 ESPN 即時傷兵名單扣除缺陣球員的綜合貢獻值;勝率與 ESPN 預測各半後,再依模型權重(以本模型賽前預測紀錄對收盤線校準,可為 0)向市場收斂,每個盤口取勝率較高的一方,只列出勝率高於賠率損益兩平(正期望值)的推薦,依勝率排序;上半場大小分以兩隊實測上半場得分佔比估算。' +
+      'NBA 以每百回合攻守效率與節奏估兩隊預期得分,主場優勢、背靠背、4 天 3 戰、跨時區與近況修正,並依 ESPN 即時傷兵名單扣除缺陣球員的綜合貢獻值;勝率與 ESPN 預測各半後,再依模型權重(以本模型賽前預測紀錄對收盤線校準,可為 0)向市場收斂,每個盤口取勝率較高的一方,只列出勝率高於賠率損益兩平(正期望值)的推薦,依勝率排序;另設「讓分觀察名單」,取模型與盤口分差差距最大的前 ' + TOP_N + ' 場、站模型那一邊,不論期望值,單獨記錄勝率以驗證模型方向;上半場大小分以兩隊實測上半場得分佔比估算。' +
       'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯)、主場球場修正(靜態表,依 2024 全壘打 park factor 估計)、以及當日主場高溫預報修正(Open-Meteo,僅溫度,無球場座向資料故不做風向修正)。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
@@ -3102,7 +3134,7 @@
   }
   // takes the unfiltered candidate lists so a section with candidates but
   // no +EV pick can say so instead of "no games"
-  function nbaSectionsHtml(ml, sp, ou, h1) {
+  function nbaSectionsHtml(ml, sp, ou, h1, watch) {
     var one = function (key, title, all) {
       var ranked = nbaRank(all);
       return sectionHtml(key, title, ranked.slice(0, TOP_N), ranked.length,
@@ -3111,21 +3143,24 @@
     return one("nba_sp", "🎯 讓分 Spread", sp) +
       one("nba_ou", "📊 大小分 Over/Under", ou) +
       one("nba_h1", "⏱️ 上半場大小分", h1) +
-      one("nba_ml", "🏆 獨贏勝率", ml);
+      one("nba_ml", "🏆 獨贏勝率", ml) +
+      sectionHtml("nba_sp_watch", "👀 讓分觀察名單(模型 vs 盤口差距最大,非正期望值)", watch.slice(0, TOP_N), watch.length);
   }
   function buildNbaLeagueBlock(rawCandidates) {
     var candidates = futureOnly(rawCandidates);
     var ml = candidates.filter(function (c) { return c.type === "ml"; });
-    var sp = candidates.filter(function (c) { return c.type === "spread"; });
+    var sp = candidates.filter(function (c) { return c.type === "spread" && !c.watch; });
+    var watch = nbaWatchRank(candidates.filter(function (c) { return c.type === "spread" && c.watch; }));
     var ou = candidates.filter(function (c) { return c.type === "over" || c.type === "under"; });
     var h1 = candidates.filter(function (c) { return c.type === "h1over" || c.type === "h1under"; });
     return {
       empty: !ml.length && !sp.length && !ou.length && !h1.length,
-      html: leagueSectionHtml("🏀", "NBA", ml.length + sp.length + ou.length + h1.length, nbaSectionsHtml(ml, sp, ou, h1)),
+      html: leagueSectionHtml("🏀", "NBA", ml.length + sp.length + ou.length + h1.length, nbaSectionsHtml(ml, sp, ou, h1, watch)),
       extraHtml: nbaTrendsHtml(),
       sections: {
         nba_ml: slimPicks(nbaRank(ml)), nba_sp: slimPicks(nbaRank(sp)),
         nba_ou: slimPicks(nbaRank(ou)), nba_h1: slimPicks(nbaRank(h1)),
+        nba_sp_watch: slimPicks(watch),
       },
     };
   }

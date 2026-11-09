@@ -17,6 +17,7 @@
     nba_sp: "🏀 NBA 讓分 Spread",
     nba_ou: "🏀 NBA 大小分 Over/Under",
     nba_h1: "🏀 NBA 上半場大小分",
+    nba_sp_watch: "🏀 NBA 讓分觀察名單(非正期望值)",
   };
 
   function esc(s) {

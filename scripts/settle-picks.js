@@ -39,7 +39,7 @@ const SECTION_META = {
   // WNBA temporarily disabled (offseason)
   // wnba_ou: "🏀 WNBA 大小分 Over/Under", wnba_sp: "🏀 WNBA 讓分 Spread",
   nba_ml: "🏀 NBA 獨贏勝率", nba_sp: "🏀 NBA 讓分 Spread", nba_ou: "🏀 NBA 大小分 Over/Under",
-  nba_h1: "🏀 NBA 上半場大小分",
+  nba_h1: "🏀 NBA 上半場大小分", nba_sp_watch: "🏀 NBA 讓分觀察名單(非正期望值)",
 };
 
 async function fetchJson(url) {
