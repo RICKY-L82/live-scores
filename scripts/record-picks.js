@@ -92,7 +92,42 @@ function countPicks(sections) {
   return Object.values(sections || {}).reduce((n, list) => n + (Array.isArray(list) ? list.length : 0), 0);
 }
 
+// +EV picks only: a *_watch list (e.g. nba_sp_watch) is filled whenever a
+// spread exists, regardless of expected value, so it says nothing about
+// whether the day's real picks were recorded
+function countEvPicks(sections) {
+  const ev = {};
+  for (const key of Object.keys(sections || {})) if (!/_watch$/.test(key)) ev[key] = sections[key];
+  return countPicks(ev);
+}
+
+function readExisting(file) {
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
+    console.error("existing " + file + " is unreadable, overwriting: " + e.message);
+    return null;
+  }
+}
+
 (async () => {
+  const date = taipeiToday();
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const file = path.join(OUT_DIR, date + ".json");
+
+  // Never redraw a day that already has +EV picks: a re-run (manual
+  // workflow_dispatch, or a backup cron landing on the same Taiwan date)
+  // would drop picks whose games have since started, reset results the
+  // settle step already filled in, and effectively let picks be redrawn.
+  // Checked before launching the browser so the backup slots cost nothing
+  // on days the first run already recorded.
+  const before = readExisting(file);
+  if (before && countEvPicks(before.sections) > 0) {
+    console.log(file + " already has " + countEvPicks(before.sections) + " +EV pick(s); leaving it untouched");
+    return;
+  }
+
   const server = await serveStatic();
   const port = server.address().port;
   const browser = await chromium.launch();
@@ -129,7 +164,6 @@ function countPicks(sections) {
       }));
   }
 
-  const total = countPicks(trimmed);
   let upcomingNba = null;
   try {
     upcomingNba = await upcomingNbaGamesWithOdds();
@@ -138,35 +172,28 @@ function countPicks(sections) {
   }
   const nbaFetchFailed = upcomingNba > 0 && !nbaCandidates;
 
-  const date = taipeiToday();
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  const file = path.join(OUT_DIR, date + ".json");
-
-  // Never overwrite a day that already has picks: a re-run (manual
-  // workflow_dispatch, or a delayed cron landing on the same Taiwan date)
-  // would drop picks whose games have since started, reset results the
-  // settle step already filled in, and effectively let picks be redrawn.
-  if (fs.existsSync(file)) {
-    let existing = null;
-    try {
-      existing = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch (e) {
-      console.error("existing " + file + " is unreadable, overwriting: " + e.message);
-    }
-    if (existing && countPicks(existing.sections) > 0) {
-      console.log(file + " already has " + countPicks(existing.sections) + " pick(s); leaving it untouched");
-      if (nbaFetchFailed) throw new Error("NBA had " + upcomingNba + " upcoming game(s) with odds but picks.js produced no NBA candidate");
-      return;
+  // A day recorded with only watch-list picks (or empty sections) gets its
+  // empty sections filled from this run; sections that already have picks
+  // are kept as-is so their games/results are never redrawn or reset.
+  const existing = readExisting(file);
+  let sectionsOut = trimmed;
+  if (existing && existing.sections && countPicks(existing.sections) > 0) {
+    sectionsOut = Object.assign({}, trimmed);
+    for (const key of Object.keys(existing.sections)) {
+      const prev = existing.sections[key];
+      if (Array.isArray(prev) && prev.length > 0) sectionsOut[key] = prev;
     }
   }
+  const total = countPicks(sectionsOut);
 
-  fs.writeFileSync(file, JSON.stringify({
+  fs.writeFileSync(file, JSON.stringify(Object.assign({
     date,
-    recordedAt: new Date().toISOString(),
-    sections: trimmed,
-  }, null, 2));
+    recordedAt: (existing && existing.recordedAt) || new Date().toISOString(),
+  }, existing && existing.recordedAt ? { updatedAt: new Date().toISOString() } : {}, {
+    sections: sectionsOut,
+  }), null, 2));
 
-  console.log("recorded " + total + " pick(s) across " + Object.keys(trimmed).length + " section(s) to " + file +
+  console.log("recorded " + total + " pick(s) across " + Object.keys(sectionsOut).length + " section(s) to " + file +
     " (NBA: " + nbaCandidates + " candidate(s), " + upcomingNba + " upcoming game(s) with odds)");
   // fail the job (after writing, so settle results still get committed) —
   // an empty file used to pass silently for 10 days while NBA was broken

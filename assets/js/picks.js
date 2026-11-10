@@ -1639,8 +1639,8 @@
   // points-model backtest's calib.market. A weight of 0 means the model adds
   // nothing over the line. Line movement from data/odds/nba.json flags picks
   // the market has moved against. Each market takes the more likely side;
-  // only picks above the price's break-even (edge > 0) are listed, ranked by
-  // win probability.
+  // only picks at least NBA_MIN_EDGE above the price's break-even are listed,
+  // ranked by win probability.
   var NBA_DEFAULTS = {
     margin: { hca: 2, b2b: 1.4, threeIn4: 0.8, travel: 0, tz: 0.8, altitude: 0, recent: 0.25, sd: 14.5 },
     total: { sd: 19 }, h1: { share: 0.505, sd: 12.5 },
@@ -1831,9 +1831,9 @@
       reasons: reasons,
     });
   }
-  // NBA lists: +EV picks only (the backtest found 大小分 never cleared -110's
-  // break-even, so every listed pick was -EV by the model's own numbers),
-  // by win probability
+  // NBA lists: picks with edge >= NBA_MIN_EDGE only (the backtest found
+  // 大小分 never cleared -110's break-even, so every listed pick was -EV by
+  // the model's own numbers), by win probability
   function nbaRank(list) {
     return list.filter(function (c) { return c.edge >= NBA_MIN_EDGE; }).sort(function (a, b) { return b.prob - a.prob; });
   }

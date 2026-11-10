@@ -12,20 +12,7 @@
     "nba_ml": [],
     "nba_sp": [],
     "nba_ou": [],
-    "nba_h1": [
-      {
-        "league": "NBA",
-        "type": "h1over",
-        "away": "Denver Nuggets",
-        "home": "Houston Rockets",
-        "start": "2026-11-10T01:30Z",
-        "pick": "上半場 大分 Over 105.5",
-        "prob": 0.50000014990049,
-        "edge": 1.499004900207268e-7,
-        "price": "100",
-        "result": null
-      }
-    ],
+    "nba_h1": [],
     "nba_sp_watch": [
       {
         "league": "NBA",
