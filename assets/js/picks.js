@@ -1647,6 +1647,10 @@
   };
   // default only when the calibration has no number; a calibrated 0 stays 0
   var NBA_MODEL_WEIGHT_DEFAULT = 0.1, NBA_MODEL_WEIGHT_MAX = 0.5;
+  // smallest edge worth listing: a market with model weight 0 sits at exactly
+  // the line, where normCdf's approximation error alone gave a "+0.00002%"
+  // edge at a +100 price and got recorded as a pick
+  var NBA_MIN_EDGE = 0.005;
   var NBA_INJ_FACTOR = 0.3;      // points per Game-Score point above replacement
   var NBA_INJ_REPL_PER_MIN = 0.15; // replacement-level Game Score per minute
   var NBA_INJ_CAP = 10;
@@ -1831,7 +1835,7 @@
   // break-even, so every listed pick was -EV by the model's own numbers),
   // by win probability
   function nbaRank(list) {
-    return list.filter(function (c) { return c.edge > 0; }).sort(function (a, b) { return b.prob - a.prob; });
+    return list.filter(function (c) { return c.edge >= NBA_MIN_EDGE; }).sort(function (a, b) { return b.prob - a.prob; });
   }
   // 觀察名單: biggest model-vs-line disagreement first
   function nbaWatchRank(list) {
@@ -3012,7 +3016,7 @@
       'MLB 再多一個獨立的「先發首局 ERA 對決」子區塊:不看球隊近況、球場或天氣,純粹取兩位先發投手各自的「首局 ERA」split(至少需 8 局首局樣本),以卜瓦松近似 P(單局不失分)=e^(−首局ERA/9) 相乘估計 NRFI 機率,是與上方複合模型互相佐證的另一個角度。' +
       '「首局勝負預測」則是同一組首局 ERA 數據的另一種用法:不是問「首局會不會有人得分」,而是把兩邊首局預期得分(對方先發的首局 ERA)當成卜瓦松分布,模擬比較客隊/主隊誰在首局搶分機率較高,建議買分數較可能領先的一邊;此區無對應公開盤口,純模型預測,不計半凱利注碼。' +
       '讓分機率由獨贏模型的期望勝率反推期望分差(常態分布近似)計算,並非逐項獨立建模。' +
-      'NBA 以每百回合攻守效率與節奏估兩隊預期得分,主場優勢、背靠背、4 天 3 戰、跨時區與近況修正,並依 ESPN 即時傷兵名單扣除缺陣球員的綜合貢獻值;勝率與 ESPN 預測各半後,再依模型權重(以本模型賽前預測紀錄對收盤線校準,可為 0)向市場收斂,每個盤口取勝率較高的一方,只列出勝率高於賠率損益兩平(正期望值)的推薦,依勝率排序;另設「讓分觀察名單」,取模型與盤口分差差距最大的前 ' + TOP_N + ' 場、站模型那一邊,不論期望值,單獨記錄勝率以驗證模型方向;上半場大小分以兩隊實測上半場得分佔比估算。' +
+      'NBA 以每百回合攻守效率與節奏估兩隊預期得分,主場優勢、背靠背、4 天 3 戰、跨時區與近況修正,並依 ESPN 即時傷兵名單扣除缺陣球員的綜合貢獻值;勝率與 ESPN 預測各半後,再依模型權重(以本模型賽前預測紀錄對收盤線校準,可為 0)向市場收斂,每個盤口取勝率較高的一方,只列出勝率高於賠率損益兩平至少 ' + (NBA_MIN_EDGE * 100) + ' 個百分點(正期望值)的推薦,依勝率排序;另設「讓分觀察名單」,取模型與盤口分差差距最大的前 ' + TOP_N + ' 場、站模型那一邊,不論期望值,單獨記錄勝率以驗證模型方向;上半場大小分以兩隊實測上半場得分佔比估算。' +
       'KBO(官方英文站)/NPB(第三方站)改抓球隊戰績與得失分,自建模型對比 The Odds API 市場最佳賠付,優勢意義同 MLB/WNBA;若賽事球隊比對不到戰績資料,才退回跨書商「去水位共識機率 vs. 場上最佳賠付」的比價模型。KBO/NPB 大小分皆會抓當日先發投手防禦率微調失分預期(同 MLB 的先發 ERA 邏輯)、主場球場修正(靜態表,依 2024 全壘打 park factor 估計)、以及當日主場高溫預報修正(Open-Meteo,僅溫度,無球場座向資料故不做風向修正)。' +
       '優勢代表理論期望值,不代表必中;半凱利為對應的建議資金比例上限。</p>' +
       '<p><a href="#" id="oddsKeyLink">' +
@@ -3138,7 +3142,7 @@
     var one = function (key, title, all) {
       var ranked = nbaRank(all);
       return sectionHtml(key, title, ranked.slice(0, TOP_N), ranked.length,
-        all.length ? "今日 " + all.length + " 注候選的模型勝率皆未超過賠率損益兩平(無正期望值),不推薦。" : null);
+        all.length ? "今日 " + all.length + " 注候選的模型勝率皆未高於賠率損益兩平 " + (NBA_MIN_EDGE * 100) + " 個百分點以上(無明顯正期望值),不推薦。" : null);
     };
     return one("nba_sp", "🎯 讓分 Spread", sp) +
       one("nba_ou", "📊 大小分 Over/Under", ou) +

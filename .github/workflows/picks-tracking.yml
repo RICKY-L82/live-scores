@@ -9,7 +9,13 @@ on:
     # started and were filtered out. An off-hour minute also avoids the
     # top-of-hour queue. Settlement runs first in the same job since by this
     # time every league's previous games are long finished.
+    # GitHub still delays these by up to ~8h (16:23 fired at 00:19 UTC on
+    # 11/10, after three 19:00 ET tip-offs), so two backup slots follow; all
+    # three land on the same Taiwan date and record-picks.js leaves a day
+    # that already has picks untouched, so whichever runs first records.
     - cron: "23 16 * * *"
+    - cron: "53 18 * * *"
+    - cron: "37 21 * * *"
   workflow_dispatch:
 
 permissions:
