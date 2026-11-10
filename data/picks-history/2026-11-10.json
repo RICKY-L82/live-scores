@@ -24,7 +24,7 @@
         "prob": 0.5238176621625705,
         "edge": -0.0022486885483299357,
         "price": "-111",
-        "result": null
+        "result": "win"
       },
       {
         "league": "NBA",
@@ -36,7 +36,7 @@
         "prob": 0.5175804755330274,
         "edge": -0.01945656150400965,
         "price": "-116",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "NBA",
@@ -48,7 +48,7 @@
         "prob": 0.50502151718155,
         "edge": -0.016509583296918873,
         "price": "-109",
-        "result": null
+        "result": "loss"
       }
     ]
   }

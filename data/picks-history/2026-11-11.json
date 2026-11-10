@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-11",
+  "recordedAt": "2026-11-10T21:52:11.873Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Milwaukee Bucks",
+        "home": "New York Knicks",
+        "start": "2026-11-11T00:30Z",
+        "pick": "New York Knicks -15.5",
+        "prob": 0.5153601574655162,
+        "edge": 0.003165035514296699,
+        "price": "-105",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Boston Celtics",
+        "home": "Philadelphia 76ers",
+        "start": "2026-11-11T01:00Z",
+        "pick": "Boston Celtics -1.5",
+        "prob": 0.5051300444342305,
+        "edge": -0.02538638749065214,
+        "price": "-113",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Oklahoma City Thunder",
+        "home": "Portland Trail Blazers",
+        "start": "2026-11-11T04:00Z",
+        "pick": "Oklahoma City Thunder -1.5",
+        "prob": 0.5042402728713411,
+        "edge": -0.021826077839559366,
+        "price": "-111",
+        "result": null
+      }
+    ]
+  }
+}
