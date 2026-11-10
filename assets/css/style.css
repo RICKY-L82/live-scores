@@ -317,6 +317,24 @@ body {
   opacity: 0.75;
 }
 .predict-empty { color: var(--text-faint); opacity: 0.7; }
+/* Card-level NBA model projection table (純模型 / 加入 ESPN / 盤口) */
+.proj-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.proj-table th, .proj-table td {
+  padding: 2px 3px;
+  text-align: right;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.proj-table th:first-child { text-align: left; }
+.proj-table thead th { font-weight: 600; border-bottom: 1px solid var(--border); }
+.proj-table tbody tr:first-child td { color: var(--text-dim); font-weight: 700; }
+.proj-table small { margin-left: 2px; font-size: 9px; opacity: 0.75; }
 
 /* Pin button */
 .pin-btn {

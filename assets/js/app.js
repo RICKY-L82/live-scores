@@ -507,8 +507,8 @@
           detail: formatTime(ev.date),
           startTime: ev.date,
           odds: extractEspnOdds(comp.odds),
-          away: { name: away.team.displayName, logo: away.team.logo },
-          home: { name: home.team.displayName, logo: home.team.logo },
+          away: { name: away.team.displayName, abbr: away.team.abbreviation || "", logo: away.team.logo },
+          home: { name: home.team.displayName, abbr: home.team.abbreviation || "", logo: home.team.logo },
         };
       }).filter(Boolean);
     });
@@ -614,7 +614,7 @@
     }
 
     var predictHtml = '<div class="predict-block" id="predict-' + esc(game.id) + '">' +
-      (predByGame.hasOwnProperty(game.id) ? predictBlockHtml(predByGame[game.id]) : '<div class="predict-empty">模型計算中…</div>') + '</div>';
+      (predByGame.hasOwnProperty(game.id) ? predictBlockHtml(predByGame[game.id], game) : '<div class="predict-empty">模型計算中…</div>') + '</div>';
 
     return (
       '<div class="game-card clickable" data-gid="' + esc(game.id) + '" style="--league-color:' + color + '">' +
@@ -1729,25 +1729,73 @@
     }).catch(function () { return null; });
   }
 
+  // the own NBA model's pre-game projection per ESPN event, logged by CI
+  // (scripts/collect-nba-stats.js) every run until tip-off
+  var projLogReq = null; // { t, p }
+  function getNbaProjLog() {
+    if (projLogReq && Date.now() - projLogReq.t < 600000) return projLogReq.p;
+    var p = fetchJson("data/nba/proj-log.json?t=" + Date.now())
+      .then(function (d) { return (d && d.games) || {}; })
+      .catch(function () { projLogReq = null; return {}; });
+    projLogReq = { t: Date.now(), p: p };
+    return p;
+  }
+
   function computeBballPrediction(game) {
     var hit = predictCache[game.id];
     if (hit && Date.now() - hit.t < 600000) return Promise.resolve(hit.v);
-    return fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/" + game.league + "/summary?event=" + game.espnId).then(function (s) {
-      var pred = s.predictor;
+    var espnReq = fetchJson("https://site.api.espn.com/apis/site/v2/sports/basketball/" + game.league + "/summary?event=" + game.espnId)
+      .catch(function () { return null; });
+    var projReq = game.league === "nba" ? getNbaProjLog() : Promise.resolve({});
+    return Promise.all([espnReq, projReq]).then(function (res) {
+      var s = res[0], log = res[1];
+      var result = {};
+      var pred = s && s.predictor;
       var aProj = pred && pred.awayTeam && parseFloat(pred.awayTeam.gameProjection);
       var hProj = pred && pred.homeTeam && parseFloat(pred.homeTeam.gameProjection);
-      if (!aProj || !hProj || aProj + hProj <= 0) return null;
-      var result = { ml: { prob: hProj / (aProj + hProj), factors: ["ESPN 勝率預測"] } };
+      if (aProj && hProj && aProj + hProj > 0) result.ml = { prob: hProj / (aProj + hProj), factors: ["ESPN 勝率預測"] };
+      var p = log[game.espnId];
+      if (p && isFinite(p.margin) && isFinite(p.total)) result.proj = p;
+      if (!result.ml && !result.proj) return null;
       predictCache[game.id] = { t: Date.now(), v: result };
       return result;
     }).catch(function () { return null; });
   }
 
+  // 純模型 / 加入 ESPN 預測後 / 盤口 — margin is home minus away
+  function projTableHtml(game, p) {
+    var aAb = esc(game.away.abbr || "客"), hAb = esc(game.home.abbr || "主");
+    function spreadStr(margin) {
+      if (!isFinite(margin)) return "—";
+      if (Math.abs(margin) < 0.05) return "PK";
+      return (margin > 0 ? hAb : aAb) + " -" + Math.abs(margin).toFixed(1);
+    }
+    function row(label, margin, total, showScore) {
+      var a = showScore ? ((total - margin) / 2).toFixed(1) : "—";
+      var h = showScore ? ((total + margin) / 2).toFixed(1) : "—";
+      return '<tr><th>' + label + '</th><td>' + a + '</td><td>' + h + '</td><td>' + spreadStr(margin) +
+        '</td><td>' + (isFinite(total) ? total.toFixed(1) : "—") + '</td></tr>';
+    }
+    var rows = row("純模型", p.margin, p.total, true);
+    if (p.espnH !== null && p.espnH !== undefined && isFinite(p.mu)) rows += row("加入 ESPN", p.mu, p.total, true);
+    var od = game.odds;
+    var hLine = od && od.spHome && od.spHome.line !== null && od.spHome.line !== undefined ? Number(od.spHome.line) : NaN;
+    var tot = NaN;
+    if (od && od.over && od.over.line) tot = Number(stripOU(od.over.line));
+    else if (od && od.overUnder !== null && od.overUnder !== undefined) tot = Number(od.overUnder);
+    if (isFinite(hLine) || isFinite(tot)) {
+      rows += row("盤口" + (od.provider ? "<small>" + esc(od.provider) + "</small>" : ""), -hLine, tot, false);
+    }
+    return '<table class="proj-table"><thead><tr><th></th><th>' + aAb + '<small>客</small></th><th>' + hAb +
+      '<small>主</small></th><th>讓分</th><th>總分</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
   var PREDICT_FETCHERS = { mlb: computeMlbPrediction, nba: computeBballPrediction, wnba: computeBballPrediction };
 
-  function predictBlockHtml(pred) {
-    if (!pred || !pred.ml) return '<div class="predict-empty">模型資料不足,暫無預測。</div>';
-    var lines = [];
+  function predictBlockHtml(pred, game) {
+    var table = pred && pred.proj && game ? projTableHtml(game, pred.proj) : "";
+    if (!pred || !pred.ml) return table || '<div class="predict-empty">模型資料不足,暫無預測。</div>';
+    var lines = [table];
     lines.push('<div class="predict-line"><span>🎯 獨贏</span><span>主 <b>' + pctStr(pred.ml.prob) +
       '</b> · 客 <b>' + pctStr(1 - pred.ml.prob) + '</b></span></div>');
     var factors = pred.ml.factors.slice();
@@ -1771,7 +1819,7 @@
         fn(game).then(function (pred) {
           predByGame[game.id] = pred;
           var el = document.getElementById("predict-" + game.id);
-          if (el) el.innerHTML = predictBlockHtml(pred);
+          if (el) el.innerHTML = predictBlockHtml(pred, game);
         });
       });
     });
