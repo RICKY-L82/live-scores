@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-10",
+  "recordedAt": "2026-11-10T00:20:19.191Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [
+      {
+        "league": "NBA",
+        "type": "h1over",
+        "away": "Denver Nuggets",
+        "home": "Houston Rockets",
+        "start": "2026-11-10T01:30Z",
+        "pick": "上半場 大分 Over 105.5",
+        "prob": 0.50000014990049,
+        "edge": 1.499004900207268e-7,
+        "price": "100",
+        "result": null
+      }
+    ],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Denver Nuggets",
+        "home": "Houston Rockets",
+        "start": "2026-11-10T01:30Z",
+        "pick": "Houston Rockets -4.5",
+        "prob": 0.5238176621625705,
+        "edge": -0.0022486885483299357,
+        "price": "-111",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Indiana Pacers",
+        "home": "Dallas Mavericks",
+        "start": "2026-11-10T01:00Z",
+        "pick": "Dallas Mavericks -4.5",
+        "prob": 0.5175804755330274,
+        "edge": -0.01945656150400965,
+        "price": "-116",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Memphis Grizzlies",
+        "home": "Toronto Raptors",
+        "start": "2026-11-10T00:30Z",
+        "pick": "Toronto Raptors +1.5",
+        "prob": 0.50502151718155,
+        "edge": -0.016509583296918873,
+        "price": "-109",
+        "result": null
+      }
+    ]
+  }
+}

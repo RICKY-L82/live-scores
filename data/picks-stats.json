@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-08T20:38:55.516Z",
+  "updated": "2026-11-10T00:20:17.869Z",
   "sections": {
     "nba_ml": {
       "label": "🏀 NBA 獨贏勝率",
@@ -31,6 +31,12 @@
     },
     "nba_h1": {
       "label": "🏀 NBA 上半場大小分",
+      "day": null,
+      "week": null,
+      "month": null
+    },
+    "nba_sp_watch": {
+      "label": "🏀 NBA 讓分觀察名單(非正期望值)",
       "day": null,
       "week": null,
       "month": null
