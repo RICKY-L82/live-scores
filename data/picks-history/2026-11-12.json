@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-12",
+  "recordedAt": "2026-11-11T22:52:03.378Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Golden State Warriors",
+        "home": "Houston Rockets",
+        "start": "2026-11-12T02:30Z",
+        "pick": "Houston Rockets -6.5",
+        "prob": 0.5131926183487554,
+        "edge": -0.021691102581477106,
+        "price": "-115",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Oklahoma City Thunder",
+        "home": "Portland Trail Blazers",
+        "start": "2026-11-12T03:00Z",
+        "pick": "Oklahoma City Thunder +2.5",
+        "prob": 0.5113371453955955,
+        "edge": -0.0032259614005210047,
+        "price": "-106",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Washington Wizards",
+        "home": "Indiana Pacers",
+        "start": "2026-11-12T00:00Z",
+        "pick": "Washington Wizards +3.5",
+        "prob": 0.5112845610229133,
+        "edge": -0.025752476014123782,
+        "price": "-116",
+        "result": null
+      }
+    ]
+  }
+}
