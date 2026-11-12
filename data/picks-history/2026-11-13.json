@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-13",
+  "recordedAt": "2026-11-12T22:20:54.818Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Detroit Pistons",
+        "home": "Washington Wizards",
+        "start": "2026-11-13T00:00Z",
+        "pick": "Detroit Pistons -10.5",
+        "prob": 0.5066539163192598,
+        "edge": -0.0007352462423165784,
+        "price": "-103",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Charlotte Hornets",
+        "home": "Phoenix Suns",
+        "start": "2026-11-13T02:00Z",
+        "pick": "Phoenix Suns -6.5",
+        "prob": 0.5054157415209897,
+        "edge": -0.013815027709779604,
+        "price": "-108",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Dallas Mavericks",
+        "home": "Minnesota Timberwolves",
+        "start": "2026-11-13T01:00Z",
+        "pick": "Minnesota Timberwolves -5.5",
+        "prob": 0.505051197452338,
+        "edge": -0.02765908292149377,
+        "price": "-114",
+        "result": null
+      }
+    ]
+  }
+}
