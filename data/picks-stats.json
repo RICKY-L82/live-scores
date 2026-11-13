@@ -1,11 +1,12 @@
 {
-  "updated": "2026-11-13T02:06:04.404Z",
+  "updated": "2026-11-13T17:44:34.686Z",
   "sections": {
     "nba_ml": {
       "label": "🏀 NBA 獨贏勝率",
       "day": null,
       "week": null,
-      "month": null
+      "month": null,
+      "clv": null
     },
     "nba_sp": {
       "label": "🏀 NBA 讓分 Spread",
@@ -16,38 +17,48 @@
         "to": "2026-11-05",
         "w": 2,
         "l": 1
+      },
+      "clv": {
+        "n": 3,
+        "avg": -0.67
       }
     },
     "nba_ou": {
       "label": "🏀 NBA 大小分 Over/Under",
       "day": null,
       "week": null,
-      "month": null
+      "month": null,
+      "clv": null
     },
     "nba_h1": {
       "label": "🏀 NBA 上半場大小分",
       "day": null,
       "week": null,
-      "month": null
+      "month": null,
+      "clv": null
     },
     "nba_sp_watch": {
-      "label": "🏀 NBA 讓分觀察名單(非正期望值)",
+      "label": "🏀 NBA 讓分觀察名單",
       "day": {
-        "date": "2026-11-12",
+        "date": "2026-11-13",
         "w": 1,
         "l": 2
       },
       "week": {
         "from": "2026-11-10",
-        "to": "2026-11-12",
-        "w": 4,
-        "l": 5
+        "to": "2026-11-13",
+        "w": 5,
+        "l": 7
       },
       "month": {
         "from": "2026-11-10",
-        "to": "2026-11-12",
-        "w": 4,
-        "l": 5
+        "to": "2026-11-13",
+        "w": 5,
+        "l": 7
+      },
+      "clv": {
+        "n": 12,
+        "avg": -0.08
       }
     }
   }
