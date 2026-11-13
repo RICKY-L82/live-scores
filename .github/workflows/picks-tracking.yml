@@ -15,6 +15,12 @@ on:
     # that already has +EV picks untouched (exiting before it launches the
     # browser), so whichever runs first records; a day that only got the
     # watch list gets its empty sections filled by a later slot.
+    # 10:17 UTC (~05:17 ET) comes first: NBA spread picks bet the model's
+    # disagreement with the early line, which the market corrects during the
+    # day (see NBA_SPREAD_MIN_GAP in assets/js/picks.js), so they are drawn as
+    # early as that day's lines exist. record-picks.js names the file after
+    # the slate, not the clock, so this lands on the same file as the slots below.
+    - cron: "17 10 * * *"
     - cron: "23 16 * * *"
     - cron: "53 18 * * *"
     - cron: "37 21 * * *"

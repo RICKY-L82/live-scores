@@ -1,0 +1,104 @@
+{
+  "date": "2026-11-14",
+  "recordedAt": "2026-11-13T07:46:12.195Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Cleveland Cavaliers",
+        "home": "Miami Heat",
+        "start": "2026-11-14T01:00Z",
+        "pick": "Cleveland Cavaliers +2.5",
+        "prob": 0.5248402973964346,
+        "edge": -0.003461589396018261,
+        "price": "-112",
+        "gap": 7.0774760806601105,
+        "at": "2026-11-13T07:46:12.173Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "New York Knicks",
+        "home": "Indiana Pacers",
+        "start": "2026-11-14T00:00Z",
+        "pick": "New York Knicks -6.5",
+        "prob": 0.5240466335164298,
+        "edge": -0.004255253276023052,
+        "price": "-112",
+        "gap": 6.851065167019163,
+        "at": "2026-11-13T07:46:12.173Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Utah Jazz",
+        "home": "Houston Rockets",
+        "start": "2026-11-14T01:30Z",
+        "pick": "Houston Rockets -16.5",
+        "prob": 0.5179561063711866,
+        "edge": -0.019080930665850482,
+        "price": "-116",
+        "gap": 5.114441709808183,
+        "at": "2026-11-13T07:46:12.173Z",
+        "result": null
+      }
+    ],
+    "nba_ou": [],
+    "nba_h1": [],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Cleveland Cavaliers",
+        "home": "Miami Heat",
+        "start": "2026-11-14T01:00Z",
+        "pick": "Cleveland Cavaliers +2.5",
+        "prob": 0.5248402973964346,
+        "edge": -0.003461589396018261,
+        "price": "-112",
+        "gap": 7.0774760806601105,
+        "at": "2026-11-13T07:46:12.173Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "New York Knicks",
+        "home": "Indiana Pacers",
+        "start": "2026-11-14T00:00Z",
+        "pick": "New York Knicks -6.5",
+        "prob": 0.5240466335164298,
+        "edge": -0.004255253276023052,
+        "price": "-112",
+        "gap": 6.851065167019163,
+        "at": "2026-11-13T07:46:12.173Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Utah Jazz",
+        "home": "Houston Rockets",
+        "start": "2026-11-14T01:30Z",
+        "pick": "Houston Rockets -16.5",
+        "prob": 0.5179561063711866,
+        "edge": -0.019080930665850482,
+        "price": "-116",
+        "gap": 5.114441709808183,
+        "at": "2026-11-13T07:46:12.173Z",
+        "result": null
+      }
+    ]
+  }
+}

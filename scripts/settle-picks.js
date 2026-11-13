@@ -28,6 +28,7 @@ const STATS_FILE = path.join(__dirname, "..", "data", "picks-stats.json");
 const SETTLE_BUFFER_MS = 4 * 3600000;   // wait this long after start before checking a result
 const VOID_AFTER_MS = 3 * 86400000;     // give up (mark void) if still unresolved after this long
 const KEEP_MS = 35 * 86400000;          // prune history files older than this
+const CLV_RETRY_MS = 10 * 86400000;     // keep looking for a settled spread pick's closing line this long
 
 const ODDS_API_KEYS = ["3fc688e03b27b3d41eb04f761c7f58c3", "78782417cf4202b1e74da436e45b3ecd", "7d1f6397f3aa8d041a767e5dcb440d97", "b998595122a6efd15f322466e21ee2b5"];
 
@@ -39,7 +40,7 @@ const SECTION_META = {
   // WNBA temporarily disabled (offseason)
   // wnba_ou: "🏀 WNBA 大小分 Over/Under", wnba_sp: "🏀 WNBA 讓分 Spread",
   nba_ml: "🏀 NBA 獨贏勝率", nba_sp: "🏀 NBA 讓分 Spread", nba_ou: "🏀 NBA 大小分 Over/Under",
-  nba_h1: "🏀 NBA 上半場大小分", nba_sp_watch: "🏀 NBA 讓分觀察名單(非正期望值)",
+  nba_h1: "🏀 NBA 上半場大小分", nba_sp_watch: "🏀 NBA 讓分觀察名單",
 };
 
 async function fetchJson(url) {
@@ -181,6 +182,7 @@ async function espnGamesForDate(leagueKey, date) {
         const aH1 = firstHalf(away), hH1 = firstHalf(home);
         if (!isFinite(Number(away.score)) || !isFinite(Number(home.score)) || away.score === "" || home.score === "") return;
         map.set(away.team.displayName + "|" + home.team.displayName, {
+          id: ev.id,
           awayScore: Number(away.score), homeScore: Number(home.score),
           h1Total: aH1 === null || hH1 === null ? null : aH1 + hH1,
         });
@@ -203,6 +205,35 @@ async function settleEspnPick(leagueKey, pick) {
     return settleTotal(pick, game.h1Total);
   }
   return null;
+}
+
+// Closing-line value for NBA spread picks. They bet the model's disagreement
+// with an early line, so the quick read on them is whether the DraftKings
+// close moved their way: clv = points the pick's line beat the closing
+// spread by (took -6.5, closed -8.5 → +2). The close comes from
+// data/nba/games.json (scripts/collect-nba-stats.js), which can trail a
+// finished game by a few hours — retried on later runs.
+let nbaGamesStore;
+function nbaCloseHomeLine(eventId) {
+  if (nbaGamesStore === undefined) {
+    try {
+      nbaGamesStore = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "nba", "games.json"), "utf8")).games || {};
+    } catch (e) {
+      nbaGamesStore = {};
+    }
+  }
+  const g = nbaGamesStore[eventId];
+  return g && g.ln && isFinite(g.ln.hl) ? g.ln.hl : null;
+}
+async function fillNbaClv(pick) {
+  const map = await espnGamesForDate("nba", espnGameDate(pick.start));
+  const game = map.get(pick.away + "|" + pick.home);
+  const hl = game ? nbaCloseHomeLine(game.id) : null;
+  const line = parseLine(pick.pick);
+  if (hl === null || line === null) return false;
+  pick.closeLine = pick.pick.indexOf(pick.home) === 0 ? hl : -hl;
+  pick.clv = Math.round((line - pick.closeLine) * 10) / 10;
+  return true;
 }
 
 // ---------- KBO / NPB (The Odds API /scores) ----------
@@ -272,9 +303,17 @@ async function settleAll() {
 
     for (const sectionKey of Object.keys(doc.sections || {})) {
       for (const pick of doc.sections[sectionKey]) {
-        if (pick.result !== null) continue;
         const startMs = new Date(pick.start).getTime();
         if (!isFinite(startMs) || now - startMs < SETTLE_BUFFER_MS) continue;
+        if (pick.result !== null) {
+          if (sectionKey.indexOf("nba_") === 0 && pick.type === "spread" && pick.result !== "void" &&
+              pick.clv === undefined && now - startMs < CLV_RETRY_MS) {
+            try {
+              if (await fillNbaClv(pick)) dirty = true;
+            } catch (e) { /* retried next run */ }
+          }
+          continue;
+        }
 
         let result = null;
         try {
@@ -287,6 +326,9 @@ async function settleAll() {
           pick.result = result;
           dirty = true;
           settledCount++;
+          if (sectionKey.indexOf("nba_") === 0 && pick.type === "spread") {
+            try { await fillNbaClv(pick); } catch (e) { /* retried next run */ }
+          }
         } else if (now - startMs > VOID_AFTER_MS) {
           pick.result = "void";
           dirty = true;
@@ -324,10 +366,11 @@ function rebuildStats() {
     .format(new Date(now.getTime() - 86400000));
 
   // per section: rolling week/month win-loss totals, plus yesterday's own tally
-  const week = {}, month = {}, dayBucket = {};
+  const week = {}, month = {}, dayBucket = {}, clv = {};
   for (const key of Object.keys(SECTION_META)) {
     week[key] = { from: null, to: null, w: 0, l: 0 };
     month[key] = { from: null, to: null, w: 0, l: 0 };
+    clv[key] = { n: 0, sum: 0 };
   }
 
   for (const fname of files) {
@@ -341,6 +384,10 @@ function rebuildStats() {
     const inWeek = new Date(date) >= weekCutoff;
     for (const key of Object.keys(doc.sections || {})) {
       if (!month[key]) continue;
+      // closing-line value counts pushes too: it's about the line, not the result
+      doc.sections[key].forEach((p) => {
+        if (typeof p.clv === "number") { clv[key].n++; clv[key].sum += p.clv; }
+      });
       const settled = doc.sections[key].filter((p) => p.result === "win" || p.result === "loss");
       if (!settled.length) continue;
       const w = settled.filter((p) => p.result === "win").length;
@@ -367,6 +414,8 @@ function rebuildStats() {
       day: dayBucket[key] || null,
       week: week[key].to ? week[key] : null,
       month: month[key].to ? month[key] : null,
+      // last 30 days' average points gained on the closing spread (NBA spread sections only)
+      clv: clv[key].n ? { n: clv[key].n, avg: Math.round(clv[key].sum / clv[key].n * 100) / 100 } : null,
     };
   }
   fs.mkdirSync(path.dirname(STATS_FILE), { recursive: true });

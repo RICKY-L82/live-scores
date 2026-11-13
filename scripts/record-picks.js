@@ -66,9 +66,16 @@ async function proxyEspn(route) {
   }
 }
 
-// Taiwan-date "today" — matches how a visitor of this site thinks about "today's picks"
-function taipeiToday() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+// The Taiwan date the current US Eastern slate is played on (ET date + 1:
+// a 19:00 ET tip-off is 08:00 the next morning in Taiwan) — the day a visitor
+// thinks of these as "today's picks". From 16:00 UTC on this is simply
+// today's Taiwan date, which is what the file was named after before; the
+// early slot (~10:00 UTC, still the previous Taiwan evening) has to land on
+// the same file as the backup slots, so the date follows the slate instead
+// of the clock.
+function slateDate() {
+  const et = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+  return new Date(Date.parse(et + "T00:00:00Z") + 86400000).toISOString().slice(0, 10);
 }
 
 // NBA games not yet started today (ET) that ESPN already has odds for — if
@@ -112,7 +119,7 @@ function readExisting(file) {
 }
 
 (async () => {
-  const date = taipeiToday();
+  const date = slateDate();
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const file = path.join(OUT_DIR, date + ".json");
 
@@ -152,6 +159,9 @@ function readExisting(file) {
 
   if (!sections) throw new Error("picks.html never set window.__picksSections");
 
+  // `at` = when this pick was drawn: spread picks bet on the line moving
+  // toward the model, so how early they were taken matters when reviewing them
+  const at = new Date().toISOString();
   const trimmed = {};
   for (const key of Object.keys(sections)) {
     trimmed[key] = (sections[key] || [])
@@ -160,6 +170,7 @@ function readExisting(file) {
       .map((c) => ({
         league: c.league, type: c.type, away: c.away, home: c.home,
         start: c.start, pick: c.pick, prob: c.prob, edge: c.edge, price: c.price,
+        gap: c.gap, at,
         result: null,
       }));
   }
