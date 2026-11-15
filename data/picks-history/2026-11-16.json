@@ -1,0 +1,104 @@
+{
+  "date": "2026-11-16",
+  "recordedAt": "2026-11-15T17:10:35.975Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "San Antonio Spurs",
+        "home": "Utah Jazz",
+        "start": "2026-11-15T22:00Z",
+        "pick": "San Antonio Spurs -15.5",
+        "prob": 0.5222820841448328,
+        "edge": -0.010428196228998932,
+        "price": "-114",
+        "gap": 6.6782909226889124,
+        "at": "2026-11-15T17:10:35.956Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "New York Knicks",
+        "home": "Toronto Raptors",
+        "start": "2026-11-15T23:00Z",
+        "pick": "New York Knicks -4.5",
+        "prob": 0.5155284006072278,
+        "edge": -0.008281123202296015,
+        "price": "-110",
+        "gap": 4.6528423528687295,
+        "at": "2026-11-15T17:10:35.956Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Indiana Pacers",
+        "home": "Philadelphia 76ers",
+        "start": "2026-11-15T18:00Z",
+        "pick": "Philadelphia 76ers -8.5",
+        "prob": 0.5140614156392689,
+        "edge": -0.009748108170254954,
+        "price": "-110",
+        "gap": 4.213086515742198,
+        "at": "2026-11-15T17:10:35.956Z",
+        "result": null
+      }
+    ],
+    "nba_ou": [],
+    "nba_h1": [],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "San Antonio Spurs",
+        "home": "Utah Jazz",
+        "start": "2026-11-15T22:00Z",
+        "pick": "San Antonio Spurs -15.5",
+        "prob": 0.5222820841448328,
+        "edge": -0.010428196228998932,
+        "price": "-114",
+        "gap": 6.6782909226889124,
+        "at": "2026-11-15T17:10:35.956Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "New York Knicks",
+        "home": "Toronto Raptors",
+        "start": "2026-11-15T23:00Z",
+        "pick": "New York Knicks -4.5",
+        "prob": 0.5155284006072278,
+        "edge": -0.008281123202296015,
+        "price": "-110",
+        "gap": 4.6528423528687295,
+        "at": "2026-11-15T17:10:35.956Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Indiana Pacers",
+        "home": "Philadelphia 76ers",
+        "start": "2026-11-15T18:00Z",
+        "pick": "Philadelphia 76ers -8.5",
+        "prob": 0.5140614156392689,
+        "edge": -0.009748108170254954,
+        "price": "-110",
+        "gap": 4.213086515742198,
+        "at": "2026-11-15T17:10:35.956Z",
+        "result": null
+      }
+    ]
+  }
+}

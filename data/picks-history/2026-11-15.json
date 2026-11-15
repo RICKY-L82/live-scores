@@ -23,7 +23,9 @@
         "price": "-106",
         "gap": 6.393181239964887,
         "at": "2026-11-14T16:37:01.567Z",
-        "result": null
+        "result": "win",
+        "closeLine": 8.5,
+        "clv": -7
       }
     ],
     "nba_ou": [],
@@ -41,7 +43,9 @@
         "price": "-106",
         "gap": 6.393181239964887,
         "at": "2026-11-14T16:37:01.567Z",
-        "result": null
+        "result": "win",
+        "closeLine": 8.5,
+        "clv": -7
       },
       {
         "league": "NBA",
@@ -55,7 +59,9 @@
         "price": "-108",
         "gap": 3.514985273371856,
         "at": "2026-11-14T16:37:01.567Z",
-        "result": null
+        "result": "loss",
+        "closeLine": -16.5,
+        "clv": 1
       },
       {
         "league": "NBA",
@@ -69,7 +75,9 @@
         "price": "-108",
         "gap": 3.210014785085275,
         "at": "2026-11-14T16:37:01.567Z",
-        "result": null
+        "result": "win",
+        "closeLine": -4.5,
+        "clv": 1
       }
     ]
   }
