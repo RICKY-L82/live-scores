@@ -51,7 +51,9 @@
         "price": "-110",
         "gap": 4.213086515742198,
         "at": "2026-11-15T17:10:35.956Z",
-        "result": "loss"
+        "result": "loss",
+        "closeLine": -7.5,
+        "clv": -1
       }
     ],
     "nba_ou": [],
@@ -97,7 +99,9 @@
         "price": "-110",
         "gap": 4.213086515742198,
         "at": "2026-11-15T17:10:35.956Z",
-        "result": "loss"
+        "result": "loss",
+        "closeLine": -7.5,
+        "clv": -1
       }
     ]
   }
