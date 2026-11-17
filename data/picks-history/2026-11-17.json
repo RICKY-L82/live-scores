@@ -27,7 +27,9 @@
         "price": "-113",
         "gap": 3.9767166978211037,
         "at": "2026-11-16T20:28:56.793Z",
-        "result": "loss"
+        "result": "loss",
+        "closeLine": -8.5,
+        "clv": 0
       },
       {
         "league": "NBA",
@@ -41,7 +43,9 @@
         "price": "-102",
         "gap": 3.6860541514683725,
         "at": "2026-11-16T20:28:56.793Z",
-        "result": null
+        "result": "win",
+        "closeLine": -2.5,
+        "clv": 0
       },
       {
         "league": "NBA",
@@ -55,7 +59,9 @@
         "price": "-113",
         "gap": 3.1726690814953393,
         "at": "2026-11-16T20:28:56.793Z",
-        "result": "win"
+        "result": "win",
+        "closeLine": -8.5,
+        "clv": 0
       }
     ]
   }

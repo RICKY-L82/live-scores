@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-18",
+  "recordedAt": "2026-11-17T19:11:13.978Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Utah Jazz",
+        "home": "LA Clippers",
+        "start": "2026-11-18T03:30Z",
+        "pick": "LA Clippers -6.5",
+        "prob": 0.50000014990049,
+        "edge": -0.016908062659896417,
+        "price": "-107",
+        "gap": 3.6651603145318656,
+        "at": "2026-11-17T19:11:13.952Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Portland Trail Blazers",
+        "home": "Minnesota Timberwolves",
+        "start": "2026-11-18T01:00Z",
+        "pick": "Minnesota Timberwolves -1.5",
+        "prob": 0.50000014990049,
+        "edge": -0.03488357102974249,
+        "price": "-115",
+        "gap": 2.7305819406678973,
+        "at": "2026-11-17T19:11:13.952Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Detroit Pistons",
+        "home": "San Antonio Spurs",
+        "start": "2026-11-18T01:00Z",
+        "pick": "San Antonio Spurs -9.5",
+        "prob": 0.50000014990049,
+        "edge": -0.03703688713654707,
+        "price": "-116",
+        "gap": 2.6323026706254122,
+        "at": "2026-11-17T19:11:13.952Z",
+        "result": null
+      }
+    ]
+  }
+}
