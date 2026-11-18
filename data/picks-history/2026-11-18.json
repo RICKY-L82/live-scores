@@ -1,7 +1,7 @@
 {
   "date": "2026-11-18",
   "recordedAt": "2026-11-17T19:11:13.978Z",
-  "updatedAt": "2026-11-17T23:40:28.560Z",
+  "updatedAt": "2026-11-18T01:29:34.941Z",
   "sections": {
     "mlb_fi": [],
     "mlb_p1era": [],
@@ -11,7 +11,22 @@
     "mlb_ml": [],
     "mlb_ml_edge": [],
     "nba_ml": [],
-    "nba_sp": [],
+    "nba_sp": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Utah Jazz",
+        "home": "LA Clippers",
+        "start": "2026-11-18T03:30Z",
+        "pick": "LA Clippers -5.5",
+        "prob": 0.50000014990049,
+        "edge": -0.03917035701195237,
+        "price": "-117",
+        "gap": 4.856174373027031,
+        "at": "2026-11-18T01:29:34.903Z",
+        "result": null
+      }
+    ],
     "nba_ou": [],
     "nba_h1": [],
     "nba_sp_watch": [
