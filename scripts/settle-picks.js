@@ -40,7 +40,7 @@ const SECTION_META = {
   // WNBA temporarily disabled (offseason)
   // wnba_ou: "🏀 WNBA 大小分 Over/Under", wnba_sp: "🏀 WNBA 讓分 Spread",
   nba_ml: "🏀 NBA 獨贏勝率", nba_sp: "🏀 NBA 讓分 Spread", nba_ou: "🏀 NBA 大小分 Over/Under",
-  nba_h1: "🏀 NBA 上半場大小分", nba_sp_watch: "🏀 NBA 讓分觀察名單",
+  nba_h1: "🏀 NBA 上半場大小分", nba_sp_watch: "🏀 NBA 讓分模型傾向(非推薦)", nba_ou_watch: "🏀 NBA 大小分模型傾向(非推薦)",
 };
 
 async function fetchJson(url) {
@@ -207,14 +207,13 @@ async function settleEspnPick(leagueKey, pick) {
   return null;
 }
 
-// Closing-line value for NBA spread picks. They bet the model's disagreement
-// with an early line, so the quick read on them is whether the DraftKings
-// close moved their way: clv = points the pick's line beat the closing
-// spread by (took -6.5, closed -8.5 → +2). The close comes from
-// data/nba/games.json (scripts/collect-nba-stats.js), which can trail a
-// finished game by a few hours — retried on later runs.
+// Closing-line value for NBA spread and total picks: whether the DraftKings
+// close moved their way. clv = points the pick's line beat the close by
+// (took -6.5, closed -8.5 → +2; took Over 220, closed 222 → +2). The close
+// comes from data/nba/games.json (scripts/collect-nba-stats.js), which can
+// trail a finished game by a few hours — retried on later runs.
 let nbaGamesStore;
-function nbaCloseHomeLine(eventId) {
+function nbaCloseLines(eventId) {
   if (nbaGamesStore === undefined) {
     try {
       nbaGamesStore = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "nba", "games.json"), "utf8")).games || {};
@@ -223,16 +222,24 @@ function nbaCloseHomeLine(eventId) {
     }
   }
   const g = nbaGamesStore[eventId];
-  return g && g.ln && isFinite(g.ln.hl) ? g.ln.hl : null;
+  return g && g.ln && isFinite(g.ln.hl) && isFinite(g.ln.tot) ? g.ln : null;
 }
+const NBA_CLV_TYPES = { spread: 1, over: 1, under: 1 };
 async function fillNbaClv(pick) {
   const map = await espnGamesForDate("nba", espnGameDate(pick.start));
   const game = map.get(pick.away + "|" + pick.home);
-  const hl = game ? nbaCloseHomeLine(game.id) : null;
+  const ln = game ? nbaCloseLines(game.id) : null;
   const line = parseLine(pick.pick);
-  if (hl === null || line === null) return false;
-  pick.closeLine = pick.pick.indexOf(pick.home) === 0 ? hl : -hl;
-  pick.clv = Math.round((line - pick.closeLine) * 10) / 10;
+  if (ln === null || line === null) return false;
+  let gain;
+  if (pick.type === "spread") {
+    pick.closeLine = pick.pick.indexOf(pick.home) === 0 ? ln.hl : -ln.hl;
+    gain = line - pick.closeLine;
+  } else {
+    pick.closeLine = ln.tot;
+    gain = pick.type === "over" ? ln.tot - line : line - ln.tot;
+  }
+  pick.clv = Math.round(gain * 10) / 10;
   return true;
 }
 
@@ -306,7 +313,7 @@ async function settleAll() {
         const startMs = new Date(pick.start).getTime();
         if (!isFinite(startMs) || now - startMs < SETTLE_BUFFER_MS) continue;
         if (pick.result !== null) {
-          if (sectionKey.indexOf("nba_") === 0 && pick.type === "spread" && pick.result !== "void" &&
+          if (sectionKey.indexOf("nba_") === 0 && NBA_CLV_TYPES[pick.type] && pick.result !== "void" &&
               pick.clv === undefined && now - startMs < CLV_RETRY_MS) {
             try {
               if (await fillNbaClv(pick)) dirty = true;
@@ -326,7 +333,7 @@ async function settleAll() {
           pick.result = result;
           dirty = true;
           settledCount++;
-          if (sectionKey.indexOf("nba_") === 0 && pick.type === "spread") {
+          if (sectionKey.indexOf("nba_") === 0 && NBA_CLV_TYPES[pick.type]) {
             try { await fillNbaClv(pick); } catch (e) { /* retried next run */ }
           }
         } else if (now - startMs > VOID_AFTER_MS) {
@@ -414,7 +421,7 @@ function rebuildStats() {
       day: dayBucket[key] || null,
       week: week[key].to ? week[key] : null,
       month: month[key].to ? month[key] : null,
-      // last 30 days' average points gained on the closing spread (NBA spread sections only)
+      // last 30 days' average points gained on the closing line (NBA spread / total sections)
       clv: clv[key].n ? { n: clv[key].n, avg: Math.round(clv[key].sum / clv[key].n * 100) / 100 } : null,
     };
   }

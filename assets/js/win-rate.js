@@ -17,7 +17,8 @@
     nba_sp: "🏀 NBA 讓分 Spread",
     nba_ou: "🏀 NBA 大小分 Over/Under",
     nba_h1: "🏀 NBA 上半場大小分",
-    nba_sp_watch: "🏀 NBA 讓分觀察名單",
+    nba_sp_watch: "🏀 NBA 讓分模型傾向(非推薦)",
+    nba_ou_watch: "🏀 NBA 大小分模型傾向(非推薦)",
   };
 
   function esc(s) {
@@ -82,7 +83,7 @@
           "<tr><td>" + SECTION_META[key] + "</td>" +
           "<td>" + esc(p.away) + " @ " + esc(p.home) + "</td>" +
           "<td>" + esc(p.pick) + (typeof p.clv === "number"
-            ? ' <span class="' + (p.clv > 0 ? "pos" : p.clv < 0 ? "neg" : "") + '">(收盤 ' + (p.closeLine > 0 ? "+" : "") + p.closeLine +
+            ? ' <span class="' + (p.clv > 0 ? "pos" : p.clv < 0 ? "neg" : "") + '">(收盤 ' + (p.type === "spread" && p.closeLine > 0 ? "+" : "") + p.closeLine +
               "," + (p.clv > 0 ? "+" : "") + p.clv + ")</span>" : "") + "</td>" +
           "<td>" + (p.prob * 100).toFixed(1) + "%</td>" +
           "<td>" + resultLabel(p.result) + "</td></tr>"
@@ -118,7 +119,7 @@
       '<div class="picks-intro analysis-box"><p>' +
       '每列是「今日推薦 TOP 5」的一個區塊;昨日/本週/本月欄位是該區塊記錄的 TOP3 候選(排除模型機率 &lt;50%)已結算賽事的實際勝率,格式為「勝-負 (勝率)」。' +
       '昨日欄位跟上方「昨日戰績」是同一天;本週/本月 = 往前推 7 天／30 天內已結算的加總。push/延賽不計入分母。樣本數少於 3 注時顯示「資料累積中」,避免用太小的樣本誤導。' +
-      '「領先收盤線」只適用 NBA 讓分:推薦當下的讓分線比 DraftKings 收盤線好幾分的平均(拿到 −6.5、收盤 −8.5 為 +2),正值代表盤口事後往推薦方向移動。' +
+      '「領先收盤線」只適用 NBA 讓分與大小分:推薦當下的盤口比 DraftKings 收盤線好幾分的平均(讓分拿到 −6.5、收盤 −8.5 為 +2;大分拿到 220、收盤 222 為 +2),正值代表盤口事後往推薦方向移動。「模型傾向」列不是推薦,只記錄模型與盤口分歧最大場次的成績。' +
       '</p></div>' +
       '<div class="table-wrap">' +
       '<table class="stat-table"><thead><tr><th>區塊</th><th>昨日</th><th>本週</th><th>本月</th><th>本月領先收盤線</th></tr></thead>' +

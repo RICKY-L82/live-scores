@@ -165,7 +165,9 @@ function readExisting(file) {
   const trimmed = {};
   for (const key of Object.keys(sections)) {
     trimmed[key] = (sections[key] || [])
-      .filter((c) => typeof c.prob === "number" && c.prob >= MIN_PROB)
+      // 模型傾向 lists aren't probability picks: with a model weight of 0
+      // their side sits at ~50% and can round just under MIN_PROB
+      .filter((c) => typeof c.prob === "number" && (/_watch$/.test(key) || c.prob >= MIN_PROB))
       .slice(0, TOP_N)
       .map((c) => ({
         league: c.league, type: c.type, away: c.away, home: c.home,
