@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-22",
+  "recordedAt": "2026-11-21T17:30:40.126Z",
+  "sections": {
+    "mlb_fi": [],
+    "mlb_p1era": [],
+    "mlb_fiw": [],
+    "mlb_ou": [],
+    "mlb_sp": [],
+    "mlb_ml": [],
+    "mlb_ml_edge": [],
+    "nba_ml": [],
+    "nba_sp": [],
+    "nba_ou": [],
+    "nba_h1": [],
+    "nba_sp_watch": [
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Boston Celtics",
+        "home": "Sacramento Kings",
+        "start": "2026-11-22T03:00Z",
+        "pick": "Boston Celtics -13.5",
+        "prob": 0.49999985009951,
+        "edge": -0.016908362460876458,
+        "price": "-107",
+        "gap": 5.051116609074949,
+        "at": "2026-11-21T17:30:40.103Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Portland Trail Blazers",
+        "home": "New York Knicks",
+        "start": "2026-11-22T00:30Z",
+        "pick": "New York Knicks -3.5",
+        "prob": 0.50000014990049,
+        "edge": -0.019230619330279253,
+        "price": "-108",
+        "gap": 4.182233536271212,
+        "at": "2026-11-21T17:30:40.103Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "spread",
+        "away": "Memphis Grizzlies",
+        "home": "Minnesota Timberwolves",
+        "start": "2026-11-22T01:00Z",
+        "pick": "Minnesota Timberwolves -6.5",
+        "prob": 0.50000014990049,
+        "edge": -0.019230619330279253,
+        "price": "-108",
+        "gap": 3.9968376964726886,
+        "at": "2026-11-21T17:30:40.103Z",
+        "result": null
+      }
+    ],
+    "nba_ou_watch": [
+      {
+        "league": "NBA",
+        "type": "under",
+        "away": "Memphis Grizzlies",
+        "home": "Minnesota Timberwolves",
+        "start": "2026-11-22T01:00Z",
+        "pick": "小分 Under 228.5",
+        "prob": 0.49999985009951,
+        "edge": -0.014563256696606519,
+        "price": "-106",
+        "gap": 10.123641085781117,
+        "at": "2026-11-21T17:30:40.103Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "under",
+        "away": "LA Clippers",
+        "home": "Dallas Mavericks",
+        "start": "2026-11-22T01:00Z",
+        "pick": "小分 Under 230.5",
+        "prob": 0.49999985009951,
+        "edge": -0.023809673710013857,
+        "price": "-110",
+        "gap": 5.540600964517068,
+        "at": "2026-11-21T17:30:40.103Z",
+        "result": null
+      },
+      {
+        "league": "NBA",
+        "type": "under",
+        "away": "Portland Trail Blazers",
+        "home": "New York Knicks",
+        "start": "2026-11-22T00:30Z",
+        "pick": "小分 Under 215.5",
+        "prob": 0.49999985009951,
+        "edge": -0.019230919131259294,
+        "price": "-108",
+        "gap": 4.443588733515071,
+        "at": "2026-11-21T17:30:40.103Z",
+        "result": null
+      }
+    ]
+  }
+}
