@@ -1,7 +1,7 @@
 {
   "date": "2026-11-25",
   "recordedAt": "2026-11-24T05:29:10.531Z",
-  "updatedAt": "2026-11-25T02:50:43.600Z",
+  "updatedAt": "2026-11-25T04:32:45.659Z",
   "sections": {
     "mlb_fi": [],
     "mlb_p1era": [],
@@ -27,7 +27,7 @@
         "price": "-104",
         "gap": 1.021670786443904,
         "at": "2026-11-24T05:29:10.512Z",
-        "result": null
+        "result": "loss"
       },
       {
         "league": "NBA",
@@ -71,7 +71,7 @@
         "price": "-110",
         "gap": 3.775399714253865,
         "at": "2026-11-24T05:29:10.512Z",
-        "result": null
+        "result": "win"
       },
       {
         "league": "NBA",
